@@ -4,11 +4,81 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#000000" />
-  <title>messana.ai</title>
-  <meta name="description" content="messana.ai — system initializing." />
+
+  <title>messana.ai — Ron Messana &middot; Kendra Messana</title>
+  <meta name="description" content="messana.ai is the personal signal node of the Messana family — Ron Messana (Ronald Messana) and Kendra Messana." />
+  <meta name="author" content="Ron Messana" />
+  <meta name="keywords" content="Messana, Ron Messana, Ronald Messana, Kendra Messana, messana.ai, Messana family" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <link rel="canonical" href="https://messana.ai/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="messana.ai" />
+  <meta property="og:url" content="https://messana.ai/" />
+  <meta property="og:title" content="messana.ai — Ron Messana &middot; Kendra Messana" />
+  <meta property="og:description" content="The personal domain of Ron Messana (Ronald Messana) and Kendra Messana — the Messana family signal node." />
+  <meta property="og:image" content="https://messana.ai/favicon.svg" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="messana.ai — Ron Messana &middot; Kendra Messana" />
+  <meta name="twitter:description" content="The personal domain of Ron Messana (Ronald Messana) and Kendra Messana." />
+  <meta name="twitter:image" content="https://messana.ai/favicon.svg" />
+
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="stylesheet" href="css/styles.css" />
   <script src="js/main.js" defer></script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://messana.ai/#website",
+        "url": "https://messana.ai/",
+        "name": "messana.ai",
+        "description": "Personal domain of the Messana family — Ron Messana and Kendra Messana.",
+        "inLanguage": "en-US",
+        "publisher": { "@id": "https://messana.ai/#ron" }
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://messana.ai/#webpage",
+        "url": "https://messana.ai/",
+        "name": "messana.ai — Ron Messana · Kendra Messana",
+        "isPartOf": { "@id": "https://messana.ai/#website" },
+        "about": [
+          { "@id": "https://messana.ai/#ron" },
+          { "@id": "https://messana.ai/#kendra" }
+        ],
+        "inLanguage": "en-US"
+      },
+      {
+        "@type": "Person",
+        "@id": "https://messana.ai/#ron",
+        "name": "Ron Messana",
+        "givenName": "Ronald",
+        "additionalName": "Ron",
+        "familyName": "Messana",
+        "alternateName": ["Ronald Messana", "Ron Messana"],
+        "url": "https://messana.ai/",
+        "mainEntityOfPage": { "@id": "https://messana.ai/#webpage" },
+        "knows": { "@id": "https://messana.ai/#kendra" }
+      },
+      {
+        "@type": "Person",
+        "@id": "https://messana.ai/#kendra",
+        "name": "Kendra Messana",
+        "givenName": "Kendra",
+        "familyName": "Messana",
+        "url": "https://messana.ai/",
+        "mainEntityOfPage": { "@id": "https://messana.ai/#webpage" },
+        "knows": { "@id": "https://messana.ai/#ron" }
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <canvas id="rain" aria-hidden="true"></canvas>
@@ -20,7 +90,7 @@
   <main class="stage">
     <header class="chrome-row" aria-hidden="true">
       <span class="pill"><span class="dot"></span>SYS // ONLINE</span>
-      <span class="hide-sm">// NODE_07 · LAT 27.894319° N · LON 82.668550° W</span>
+      <span class="hide-sm">// NODE_07 · OPERATOR // RON MESSANA · LAT 27.894319° N · LON 82.668550° W</span>
       <span id="clock" class="pill">00:00:00 UTC</span>
     </header>
 
@@ -28,12 +98,14 @@
       <h1 class="wordmark" data-text="messana.ai">
         messana<span class="dot-mark">.</span><span class="accent">ai</span>
       </h1>
+      <p class="tagline">Ron Messana &middot; Kendra Messana</p>
     </section>
 
     <footer class="chrome-row bottom" aria-hidden="true">
       <pre class="ascii">  ▓▒░  signal locked
-  ▓▒░  trace established</pre>
-      <span class="hide-sm">// © 2026 messana.ai · all systems nominal</span>
+  ▓▒░  operator // ron messana
+  ▓▒░  contact  // kendra messana</pre>
+      <span class="hide-sm">// © 2026 messana.ai · ronald messana · kendra messana · all systems nominal</span>
       <span class="pill">v0.1 // BUILD_<span id="build">A1F3</span></span>
     </footer>
   </main>

@@ -37,8 +37,22 @@ html, body {
 body {
   min-height: 100dvh;
   font-family: var(--mono);
-  background: var(--ivory);
   color: var(--ink-dark);
+
+  /* "Light in a room," not wallpaper: a soft warm-white spotlight pools
+     behind the wordmark, fading to a faintly violet-tinted ivory at the
+     edges (implicit vignette), over a vertical wash that cools toward the
+     lower third so the staff feels seated rather than floating. Pure CSS,
+     no frame cost; the canvas clears to transparent and rides on top. */
+  background:
+    radial-gradient(135% 100% at 50% 40%,
+      #ffffff 0%,
+      rgba(255, 255, 255, 0) 58%),
+    linear-gradient(180deg,
+      var(--ivory) 0%,
+      #f4ecff 60%,
+      #ede4ff 100%);
+  background-attachment: fixed;   /* keep the wash put on mobile address-bar resize */
 }
 
 /* --- Canvas score (full bleed) --- */

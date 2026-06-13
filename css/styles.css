@@ -212,6 +212,22 @@ body {
   .wordmark .sub { letter-spacing: 0.4em; margin-top: 0.85rem; }
 }
 
+/* Phone in landscape (short, wide viewport): shrink the chrome and drop
+   the ellipsis/width caps so the full lat/long and name lines stay
+   readable inside the safe area instead of being truncated. */
+@media (orientation: landscape) and (max-height: 480px) {
+  .chrome { font-size: 0.58rem; letter-spacing: 0.06em; }
+  .row { gap: 0.6rem; }
+  .coords,
+  .caption {
+    max-width: none;
+    min-width: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dot-led { animation: none; }
   .grain { animation: none; opacity: 0.04; }

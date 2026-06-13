@@ -1,0 +1,278 @@
+/* ============================================================
+   messana.ai — v3 concept system
+   Royal purple + white · violin · piano · artificial intelligence
+   Shared tokens, layout shell, and chrome for all 10 concepts.
+   ============================================================ */
+
+:root {
+  /* Purple ramp (dark → light) */
+  --aubergine: #160726;
+  --plum:      #2e1065;
+  --violet:    #4c1d95;
+  --royal:     #7c3aed;
+  --amethyst:  #a78bfa;
+  --lilac:     #d8c9ff;
+
+  /* Neutrals */
+  --white:  #ffffff;
+  --ivory:  #fbf9ff;
+  --ink:    #f3e8ff;   /* light text on dark */
+  --ink-dim: rgba(243, 232, 255, 0.55);
+  --ink-dark: #2e1065; /* dark text on light */
+  --ink-dark-dim: rgba(46, 16, 101, 0.55);
+
+  --accent: #c4b5fd;
+
+  --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --mono:  'IBM Plex Mono', 'Courier New', monospace;
+
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-height: 100dvh;
+  font-family: var(--mono);
+  background: var(--aubergine);
+  color: var(--ink);
+}
+
+/* Light-themed concepts opt in with <body class="light"> */
+body.light {
+  background: var(--ivory);
+  color: var(--ink-dark);
+}
+
+canvas.bg {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  display: block;
+  z-index: 0;
+}
+
+/* ---- Centered wordmark ---- */
+.stage {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.wordmark {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2.8rem, 11vw, 8rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  text-shadow: 0 0 40px rgba(124, 58, 237, 0.45);
+  user-select: none;
+}
+body.light .wordmark { text-shadow: 0 0 36px rgba(124, 58, 237, 0.22); }
+
+.wordmark .ai {
+  font-style: italic;
+  color: var(--amethyst);
+}
+body.light .wordmark .ai { color: var(--royal); }
+
+.concept-label {
+  margin-top: 1.4rem;
+  font-family: var(--mono);
+  font-size: clamp(0.6rem, 1.5vw, 0.78rem);
+  font-weight: 400;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  text-transform: uppercase;
+  color: var(--amethyst);
+}
+body.light .concept-label { color: var(--royal); }
+
+/* ---- Chrome / nav ---- */
+.chrome {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  padding:
+    calc(1.1rem + env(safe-area-inset-top))
+    calc(1.1rem + env(safe-area-inset-right))
+    calc(1.1rem + env(safe-area-inset-bottom))
+    calc(1.1rem + env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: clamp(0.6rem, 1.4vw, 0.72rem);
+  letter-spacing: 0.18em;
+}
+
+.chrome .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.back {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.45em 0.9em;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.12);
+  color: var(--ink);
+  text-decoration: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: border-color 0.3s var(--ease), background 0.3s var(--ease);
+  white-space: nowrap;
+}
+.back:hover { border-color: var(--amethyst); background: rgba(124, 58, 237, 0.22); }
+body.light .back { color: var(--ink-dark); border-color: rgba(124, 58, 237, 0.3); background: rgba(124, 58, 237, 0.08); }
+
+.tag {
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+body.light .tag { color: var(--ink-dark-dim); }
+.tag b { color: var(--amethyst); font-weight: 500; }
+body.light .tag b { color: var(--royal); }
+
+/* ---- Phones: keep chrome text from clipping under the notch / off-screen ----
+   Safe-area insets are already in .chrome padding; here we let the rows wrap
+   and shrink so long lines (lat/long, names, clock) stay fully visible. */
+@media (max-width: 600px) {
+  .chrome { font-size: 0.6rem; letter-spacing: 0.08em; }
+  .chrome .row { gap: 0.5rem 0.8rem; flex-wrap: wrap; }
+  .tag { white-space: normal; }
+}
+
+/* Phone in landscape (short, wide viewport) */
+@media (orientation: landscape) and (max-height: 480px) {
+  .chrome { font-size: 0.58rem; letter-spacing: 0.05em; }
+  .chrome .row { gap: 0.4rem 0.7rem; flex-wrap: wrap; }
+  .tag { white-space: normal; }
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ===========================================================
+   Gallery (index.html)
+   =========================================================== */
+.gallery {
+  position: relative;
+  z-index: 3;
+  min-height: 100dvh;
+  overflow-y: auto;
+  padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 5vw, 4rem) 5rem;
+}
+
+.gallery header { max-width: 60rem; margin-bottom: clamp(2rem, 5vw, 3.5rem); }
+
+.gallery h1 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2.4rem, 7vw, 5rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.gallery h1 .ai { font-style: italic; color: var(--amethyst); }
+
+.gallery .lede {
+  margin-top: 1.2rem;
+  max-width: 46rem;
+  color: var(--ink-dim);
+  font-size: clamp(0.8rem, 1.6vw, 1rem);
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+}
+.gallery .lede b { color: var(--amethyst); font-weight: 500; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: clamp(1rem, 2.5vw, 1.6rem);
+  max-width: 84rem;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 14rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(76, 29, 149, 0.35), rgba(22, 7, 38, 0.5));
+  color: var(--ink);
+  text-decoration: none;
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.5s var(--ease), border-color 0.5s var(--ease), box-shadow 0.5s var(--ease);
+}
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(120% 80% at 80% 0%, rgba(124, 58, 237, 0.5), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.5s var(--ease);
+}
+.card:hover {
+  transform: translateY(-4px);
+  border-color: var(--amethyst);
+  box-shadow: 0 18px 50px -20px rgba(124, 58, 237, 0.6);
+}
+.card:hover::after { opacity: 1; }
+
+.card .num {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.3em;
+  color: var(--amethyst);
+}
+.card h2 {
+  margin-top: 0.6rem;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+.card p {
+  margin-top: 0.7rem;
+  color: var(--ink-dim);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+.card .medium {
+  margin-top: auto;
+  padding-top: 1rem;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}

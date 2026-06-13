@@ -1,11 +1,27 @@
+/* ============================================================
+   messana.ai — v3 "The Glass Score"
+   Royal purple + white. A quiet wordmark over a staff where a
+   hidden melody is written, note by note.
+   ============================================================ */
+
 :root {
-  --black: #000000;
-  --green: #00ff9d;
-  --ink: #e8fff5;
-  --dim: rgba(0, 255, 157, 0.25);
-  --cyan: #00e5ff;
-  --magenta: #ff2d6f;
-  --mono: 'Courier New', Courier, monospace;
+  --aubergine: #160726;
+  --plum:      #2e1065;
+  --violet:    #4c1d95;
+  --royal:     #7c3aed;
+  --amethyst:  #a78bfa;
+  --lilac:     #d8c9ff;
+
+  --white:  #ffffff;
+  --ivory:  #fbf9ff;
+  --ink:    #f3e8ff;                       /* light text on dark */
+  --ink-dim: rgba(243, 232, 255, 0.55);
+  --ink-dark: #2e1065;                      /* dark text on light */
+  --ink-dark-dim: rgba(46, 16, 101, 0.55);
+
+  --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --mono:  'IBM Plex Mono', 'Courier New', monospace;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -13,20 +29,20 @@
 html, body {
   width: 100%;
   height: 100%;
-  background: var(--black);
-  color: var(--ink);
-  font-family: var(--mono);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   min-height: 100dvh;
-  position: relative;
+  font-family: var(--mono);
+  background: var(--ivory);
+  color: var(--ink-dark);
 }
 
-/* --- 3D canvas --- */
-#scene {
+/* --- Canvas score (full bleed) --- */
+canvas.bg {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -36,199 +52,82 @@ body {
 }
 
 /* --- Centered wordmark --- */
-.wordmark-wrap {
+.stage {
   position: fixed;
   inset: 0;
+  z-index: 3;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 3;
   pointer-events: none;
-  padding: 1rem;
+  padding: 1.5rem;
+  text-align: center;
 }
 
 .wordmark {
-  font-weight: 200;
-  font-size: clamp(2.6rem, 11vw, 8.5rem);
-  letter-spacing: -0.04em;
-  line-height: 1;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2.8rem, 11vw, 8rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
   white-space: nowrap;
-  color: var(--ink);
-  text-shadow:
-    0 0 12px rgba(0, 255, 157, 0.45),
-    0 0 38px rgba(0, 255, 157, 0.28),
-    0 0 90px rgba(0, 255, 157, 0.16);
+  color: var(--ink-dark);
+  text-shadow: 0 0 36px rgba(124, 58, 237, 0.22);
   user-select: none;
 }
 
-.wordmark .dot,
-.wordmark .accent {
-  color: var(--green);
+.wordmark .ai {
+  font-style: italic;
+  color: var(--royal);
 }
 
-.wordmark .sub {
-  display: block;
-  margin-top: 1.1rem;
-  font-size: clamp(0.5rem, 1.6vw, 0.8rem);
-  letter-spacing: 0.55em;
-  font-weight: 400;
-  text-indent: 0.55em;
-  color: var(--dim);
-  text-align: center;
-  text-shadow: none;
-}
-
-/* --- Terminal chrome overlay --- */
+/* --- Chrome overlay (coords, clock, names) --- */
 .chrome {
   position: fixed;
   inset: 0;
   z-index: 4;
   pointer-events: none;
   padding:
-    calc(clamp(0.9rem, 2.4vw, 1.8rem) + env(safe-area-inset-top))
-    calc(clamp(0.9rem, 2.4vw, 1.8rem) + env(safe-area-inset-right))
-    calc(clamp(0.9rem, 2.4vw, 1.8rem) + env(safe-area-inset-bottom))
-    calc(clamp(0.9rem, 2.4vw, 1.8rem) + env(safe-area-inset-left));
+    calc(1.1rem + env(safe-area-inset-top))
+    calc(1.1rem + env(safe-area-inset-right))
+    calc(1.1rem + env(safe-area-inset-bottom))
+    calc(1.1rem + env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  font-size: clamp(0.6rem, 1.5vw, 0.74rem);
+  font-size: clamp(0.6rem, 1.4vw, 0.72rem);
   letter-spacing: 0.18em;
-  color: var(--green);
 }
 
-.row {
+.chrome .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55em;
-  padding: 0.4em 0.85em;
-  border: 1px solid var(--dim);
-  border-radius: 999px;
-  background: rgba(0, 20, 13, 0.35);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+.tag {
+  color: var(--ink-dark-dim);
   white-space: nowrap;
 }
+.tag b { color: var(--royal); font-weight: 500; }
 
-.dot-led {
-  width: 0.5em;
-  height: 0.5em;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 8px var(--green);
-  animation: pulse 1.8s ease-in-out infinite;
+/* --- Phones: keep chrome text from clipping under the notch / off-screen.
+   Safe-area insets are already in .chrome padding; here we let the rows
+   wrap and shrink so the lat/long, clock, and names stay fully visible. --- */
+@media (max-width: 600px) {
+  .chrome { font-size: 0.6rem; letter-spacing: 0.08em; }
+  .chrome .row { gap: 0.5rem 0.8rem; flex-wrap: wrap; }
+  .tag { white-space: normal; }
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.3; transform: scale(0.7); }
-}
-
-.clock { white-space: nowrap; color: var(--ink); }
-
-.coords {
-  color: var(--dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-shadow: 0 0 8px rgba(0, 255, 157, 0.18);
-}
-
-.caption {
-  color: var(--dim);
-  max-width: 70vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.caption b { color: var(--green); font-weight: 400; }
-
-/* --- Film grain + scanlines --- */
-.scanlines {
-  position: fixed;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0) 0px,
-    rgba(0, 0, 0, 0) 2px,
-    rgba(0, 0, 0, 0.18) 3px,
-    rgba(0, 0, 0, 0) 4px
-  );
-  opacity: 0.5;
-}
-
-.vignette {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(0, 0, 0, 0) 38%,
-    rgba(0, 0, 0, 0.55) 100%
-  );
-}
-
-.grain {
-  position: fixed;
-  inset: -50%;
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0.06;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  animation: grainshift 0.6s steps(3) infinite;
-}
-
-@keyframes grainshift {
-  0% { transform: translate(0, 0); }
-  33% { transform: translate(-4%, 2%); }
-  66% { transform: translate(3%, -3%); }
-  100% { transform: translate(0, 0); }
-}
-
-/* --- Responsive --- */
-@media (max-width: 720px) {
-  .hide-sm { display: none; }
-}
-
-@media (max-width: 480px) {
-  .chrome { font-size: 0.62rem; letter-spacing: 0.1em; }
-  .pill { padding: 0.38em 0.7em; flex-shrink: 0; }
-  .caption {
-    flex: 1 1 auto;
-    min-width: 0;
-    max-width: none;
-    margin-right: 0.6rem;
-  }
-  .wordmark .sub { letter-spacing: 0.4em; margin-top: 0.85rem; }
-}
-
-/* Phone in landscape (short, wide viewport): shrink the chrome and drop
-   the ellipsis/width caps so the full lat/long and name lines stay
-   readable inside the safe area instead of being truncated. */
 @media (orientation: landscape) and (max-height: 480px) {
-  .chrome { font-size: 0.58rem; letter-spacing: 0.06em; }
-  .row { gap: 0.6rem; }
-  .coords,
-  .caption {
-    max-width: none;
-    min-width: 0;
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-  }
+  .chrome { font-size: 0.58rem; letter-spacing: 0.05em; }
+  .chrome .row { gap: 0.4rem 0.7rem; flex-wrap: wrap; }
+  .tag { white-space: normal; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot-led { animation: none; }
-  .grain { animation: none; opacity: 0.04; }
+  * { animation: none !important; transition: none !important; }
 }

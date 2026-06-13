@@ -1,12 +1,29 @@
-import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+/* ============================================================
+   messana.ai — v3 "The Glass Score"
+   A UTC clock, and a hidden melody written onto a staff by a
+   slow "AI" cursor. The notes are Ed Sheeran's "Thinking Out
+   Loud" (verse, D major) — a quiet gem for those who read music.
+   ============================================================ */
 
-/* ---------- Chrome: clock + build hash ---------- */
-const buildHash = Math.floor(Math.random() * 0xffff).toString(16).toUpperCase().padStart(4, '0');
-document.getElementById('build').textContent = `v2.0 // BUILD_${buildHash}`;
+/* PWA: register the service worker (root scope) */
+if ('serviceWorker' in navigator) {
+  addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
 
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cv = document.getElementById('scene');
+const ctx = cv.getContext('2d');
+let W, H, dpr;
+function fit() {
+  dpr = Math.min(devicePixelRatio, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+fit();
+addEventListener('resize', fit);
+
+/* live UTC timestamp */
 const clockEl = document.getElementById('clock');
 function tickClock() {
   const d = new Date();
@@ -18,309 +35,140 @@ function tickClock() {
 tickClock();
 setInterval(tickClock, 1000);
 
-const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ROYAL = '124, 58, 237';
+const LINES = 5, GAP = 16;
+const BPM = 79;   // "Thinking Out Loud" tempo (4/4)
 
-/* ---------- Glyph atlas (offscreen 2D canvas -> CanvasTexture) ---------- */
-const GRID = 8;                 // 8 x 8 = 64 cells
-const CELL = 64;                // px per cell
-const ATLAS = GRID * CELL;      // 512
+// --- "Thinking Out Loud" (Ed Sheeran) — verse, D major (two sharps: F#, C#).
+// Transcribed by ear within the song's known frame (D major, 4/4, ~79 BPM,
+// fully diatonic over I-IV-V); transposed up one octave to sit on the treble
+// staff. Each entry: [letter, octave, beats, lyric] (sharps come from the key sig).
+const LETTER = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+const THEME = [
+  ['A', 4, 0.5, 'When'], ['B', 4, 0.5, 'your'],
+  ['D', 5, 0.75, 'legs'], ['D', 5, 0.5, 'don\u2019t'], ['D', 5, 0.5, 'work'], ['D', 5, 0.5, 'like'], ['D', 5, 0.5, 'they'],
+  ['E', 5, 0.5, 'used'], ['F', 5, 0.5, 'to'], ['E', 5, 0.75, 'be-'], ['D', 5, 1, 'fore'],
+  ['A', 4, 0.5, 'and'], ['B', 4, 0.5, 'I'],
+  ['D', 5, 0.5, 'can\u2019t'], ['D', 5, 0.5, 'sweep'], ['D', 5, 0.5, 'you'],
+  ['E', 5, 0.5, 'off'], ['D', 5, 0.5, 'of'], ['B', 4, 0.5, 'your'], ['A', 4, 1.5, 'feet'],
+];
+const totalBeats = THEME.reduce((s, n) => s + n[2], 0);
+const CYCLE = totalBeats * 60 / BPM;   // one sweep = the phrase at the real tempo
+let acc = 0;
+const seq = THEME.map((n) => {
+  const startN = acc / totalBeats;
+  acc += n[2];
+  const deg = n[1] * 7 + LETTER[n[0]] - 34; // diatonic steps from B4 (centre line)
+  return { deg, startN, x: 0, born: null };
+});
+let lastLap = -1;
 
-// katakana + digits + a few symbols
-const glyphs = [];
-for (let c = 0x30A1; c <= 0x30F6; c++) glyphs.push(String.fromCharCode(c)); // katakana
-'0123456789'.split('').forEach(ch => glyphs.push(ch));
-'ｱｲｳ:=*+<>'.split('').forEach(ch => glyphs.push(ch));
-while (glyphs.length < GRID * GRID) glyphs.push('0');
-glyphs.length = GRID * GRID;
+function staffY() { return H * 0.66; }
+function staffMargin() { return Math.min(W * 0.1, 110); }
 
-function buildAtlas() {
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = ATLAS;
-  const ctx = cv.getContext('2d');
-  ctx.clearRect(0, 0, ATLAS, ATLAS);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `${Math.floor(CELL * 0.74)}px 'Courier New', Courier, monospace`;
-  ctx.textAlign = 'center';
+function glyph(ch, size, x, y, alpha, align) {
+  ctx.fillStyle = `rgba(${ROYAL}, ${alpha})`;
+  ctx.font = `${size}px 'Segoe UI Symbol', 'Noto Music', serif`;
   ctx.textBaseline = 'middle';
-  for (let i = 0; i < glyphs.length; i++) {
-    const col = i % GRID;
-    const row = Math.floor(i / GRID);
-    const cx = col * CELL + CELL / 2;
-    const cy = row * CELL + CELL / 2;
-    ctx.fillText(glyphs[i], cx, cy);
+  ctx.textAlign = align || 'left';
+  ctx.fillText(ch, x, y);
+}
+
+function draw(time) {
+  ctx.clearRect(0, 0, W, H);
+  const cy = staffY();
+  const left = staffMargin();
+  const x0 = left + 76;            // notes start after clef + key signature
+  const x1 = W - staffMargin();
+  const span = x1 - x0;
+
+  // staff lines
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = `rgba(${ROYAL}, 0.22)`;
+  for (let i = 0; i < LINES; i++) {
+    const y = cy + (i - (LINES - 1) / 2) * GAP;
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(x1, y); ctx.stroke();
   }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.generateMipmaps = false;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
 
-// UV bottom-left offset of each cell, accounting for default flipY=true
-function cellOffset(index) {
-  const col = index % GRID;
-  const row = Math.floor(index / GRID);
-  return [col / GRID, 1 - (row + 1) / GRID];
-}
+  // treble clef + D-major key signature (F# on the top line, C# in the 3rd space)
+  glyph('\uD834\uDD1E', 56, left + 2, cy + 3, 0.8);  // 𝄞
+  glyph('\u266F', 22, left + 46, cy - 4 * (GAP / 2), 0.7);  // ♯ on F5
+  glyph('\u266F', 22, left + 58, cy - 1 * (GAP / 2), 0.7);  // ♯ on C5
 
-/* ---------- Renderer / scene / camera ---------- */
-const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x000000, 1);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // cursor sweep + per-lap reset
+  const prog = (time / CYCLE) % 1;
+  const cx = x0 + prog * span;
+  const lap = Math.floor(time / CYCLE);
+  if (lap !== lastLap) { lastLap = lap; seq.forEach((n) => (n.born = null)); }
 
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x000000, 0.021);
+  // reveal notes as the cursor reaches them
+  seq.forEach((n) => {
+    n.x = x0 + n.startN * span;
+    if (prog >= n.startN && n.born === null) n.born = time;
+  });
+  const shown = seq.filter((n) => n.born !== null);
 
-const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 200);
-camera.position.set(0, 0, 12);
-
-// Aspect-aware framing: a fixed vertical FOV zooms in too far on tall,
-// narrow phone screens (portrait), hiding the side rain. Widen the
-// vertical FOV as the viewport gets narrower so the scene stays immersive.
-const BASE_FOV = 62;
-function applyCameraProjection() {
-  const aspect = window.innerWidth / window.innerHeight;
-  camera.aspect = aspect;
-  camera.fov = aspect < 1
-    ? THREE.MathUtils.clamp(BASE_FOV / Math.max(aspect, 0.5), BASE_FOV, 85)
-    : BASE_FOV;
-  camera.updateProjectionMatrix();
-}
-applyCameraProjection();
-
-/* ---------- Volumetric rain (InstancedMesh + atlas shader) ---------- */
-const STREAMS = 150;
-const PER_STREAM = 18;
-const COUNT = STREAMS * PER_STREAM;
-const SPACING = 1.45;
-
-const BOUNDS = { x: 30, y: 28, zNear: 7, zFar: -46 };
-
-const geo = new THREE.PlaneGeometry(1.15, 1.45);
-const aOffset = new Float32Array(COUNT * 2);
-const aIntensity = new Float32Array(COUNT);
-geo.setAttribute('aOffset', new THREE.InstancedBufferAttribute(aOffset, 2).setUsage(THREE.DynamicDrawUsage));
-geo.setAttribute('aIntensity', new THREE.InstancedBufferAttribute(aIntensity, 1));
-
-const atlas = buildAtlas();
-const material = new THREE.MeshBasicMaterial({
-  map: atlas,
-  transparent: true,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false,
-  depthTest: false,
-  fog: true,
-});
-
-const headColor = new THREE.Color(0xe8fff5);
-const tailColor = new THREE.Color(0x00ff9d);
-
-material.onBeforeCompile = (shader) => {
-  shader.uniforms.cellSize = { value: 1 / GRID };
-  shader.uniforms.uHead = { value: headColor };
-  shader.uniforms.uTail = { value: tailColor };
-
-  shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', `#include <common>
-      attribute vec2 aOffset;
-      attribute float aIntensity;
-      uniform float cellSize;
-      varying vec2 vAtlasUv;
-      varying float vIntensity;`)
-    .replace('#include <begin_vertex>', `#include <begin_vertex>
-      vAtlasUv = aOffset + uv * cellSize;
-      vIntensity = aIntensity;`);
-
-  shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', `#include <common>
-      varying vec2 vAtlasUv;
-      varying float vIntensity;
-      uniform vec3 uHead;
-      uniform vec3 uTail;`)
-    .replace('#include <map_fragment>', `
-      vec4 texel = texture2D( map, vAtlasUv );
-      float mask = texel.a;
-      vec3 col = mix( uTail, uHead, smoothstep(0.55, 1.0, vIntensity) );
-      // boost the leading glyph toward white-hot
-      col += uHead * pow(vIntensity, 6.0) * 0.6;
-      diffuseColor.rgb = col;
-      diffuseColor.a *= mask * (0.05 + 0.95 * vIntensity);`);
-};
-
-const mesh = new THREE.InstancedMesh(geo, material, COUNT);
-mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-mesh.frustumCulled = false;
-scene.add(mesh);
-
-// per-stream state
-// Keep a clear vertical corridor down the foreground center so the
-// wordmark stays readable. Streams nearer the camera than CLEAR_Z must
-// sit outside a horizontal half-width of CLEAR_X; distant streams (small,
-// dim, fogged) are free to fill the background behind the text.
-let CLEAR_X = 11;
-const CLEAR_Z = -14;
-const CAM_BASE_Z = 12;
-
-// Size the clear corridor to the visible width at the clearance plane so
-// the wordmark stays unobstructed on any screen. Portrait phones keep a
-// larger fraction clear (the wordmark occupies more of a narrow screen);
-// wide screens keep it tighter so foreground rain still fills the sides.
-function computeClearX() {
-  const refDist = CAM_BASE_Z - CLEAR_Z;
-  const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * refDist;
-  const halfW = halfH * camera.aspect;
-  const clearFrac = camera.aspect < 1 ? 0.72 : 0.42;
-  CLEAR_X = THREE.MathUtils.clamp(halfW * clearFrac, 5, BOUNDS.x * 0.9);
-}
-computeClearX();
-
-function placeStreamXZ(stream) {
-  stream.z = THREE.MathUtils.randFloat(BOUNDS.zFar, BOUNDS.zNear);
-  let x = THREE.MathUtils.randFloatSpread(BOUNDS.x * 2);
-  if (stream.z > CLEAR_Z && Math.abs(x) < CLEAR_X) {
-    const sign = x < 0 ? -1 : 1;
-    x = sign * THREE.MathUtils.randFloat(CLEAR_X, BOUNDS.x);
+  // melodic contour
+  if (shown.length > 1) {
+    ctx.strokeStyle = `rgba(${ROYAL}, 0.16)`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    shown.forEach((n, i) => {
+      const ny = cy - n.deg * (GAP / 2);
+      if (i === 0) ctx.moveTo(n.x, ny); else ctx.lineTo(n.x, ny);
+    });
+    ctx.stroke();
   }
-  stream.x = x;
+
+  // notes with ink-bleed fade-in
+  const baseR = Math.min(5, (span / seq.length) * 0.4); // shrink heads when the staff is narrow
+  shown.forEach((n) => {
+    const age = time - n.born;
+    const ny = cy - n.deg * (GAP / 2);
+    const grow = Math.min(age / 0.35, 1);
+    const r = baseR + (1 - grow) * 6;
+    const a = Math.min(age / 0.3, 1) * 0.92;
+
+    // ledger lines for notes beyond the staff
+    ctx.strokeStyle = `rgba(${ROYAL}, ${a * 0.7})`;
+    ctx.lineWidth = 1;
+    if (n.deg > 4) for (let d = 6; d <= n.deg; d += 2) { const ly = cy - d * (GAP / 2); ctx.beginPath(); ctx.moveTo(n.x - 11, ly); ctx.lineTo(n.x + 11, ly); ctx.stroke(); }
+    if (n.deg < -4) for (let d = -6; d >= n.deg; d -= 2) { const ly = cy - d * (GAP / 2); ctx.beginPath(); ctx.moveTo(n.x - 11, ly); ctx.lineTo(n.x + 11, ly); ctx.stroke(); }
+
+    // note head
+    ctx.fillStyle = `rgba(${ROYAL}, ${a})`;
+    ctx.beginPath(); ctx.ellipse(n.x, ny, r * 1.25, r, -0.35, 0, 7); ctx.fill();
+
+    // stem: down for high notes, up for low
+    ctx.strokeStyle = `rgba(${ROYAL}, ${a * 0.75})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (n.deg >= 1) { ctx.moveTo(n.x - r * 1.1, ny); ctx.lineTo(n.x - r * 1.1, ny + 34); }
+    else { ctx.moveTo(n.x + r * 1.1, ny); ctx.lineTo(n.x + r * 1.1, ny - 34); }
+    ctx.stroke();
+  });
+
+  // AI cursor: glowing vertical line with a soft halo
+  const grad = ctx.createLinearGradient(cx, cy - 70, cx, cy + 70);
+  grad.addColorStop(0, `rgba(${ROYAL}, 0)`);
+  grad.addColorStop(0.5, `rgba(${ROYAL}, 0.9)`);
+  grad.addColorStop(1, `rgba(${ROYAL}, 0)`);
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx, cy - 70); ctx.lineTo(cx, cy + 70); ctx.stroke();
+  ctx.fillStyle = `rgba(${ROYAL}, 0.9)`;
+  ctx.beginPath(); ctx.arc(cx, cy - 78, 3.5, 0, 7); ctx.fill();
 }
 
-const streams = [];
-for (let s = 0; s < STREAMS; s++) {
-  const stream = {
-    x: 0,
-    z: 0,
-    headY: THREE.MathUtils.randFloat(-BOUNDS.y, BOUNDS.y + 30),
-    speed: THREE.MathUtils.randFloat(5.5, 13.5),
-    swap: THREE.MathUtils.randFloat(0.04, 0.16),
-  };
-  placeStreamXZ(stream);
-  streams.push(stream);
-}
-
-function randGlyphOffset(idx) {
-  const off = cellOffset(Math.floor(Math.random() * glyphs.length));
-  aOffset[idx * 2] = off[0];
-  aOffset[idx * 2 + 1] = off[1];
-}
-
-// initialize attributes + intensities
-for (let s = 0; s < STREAMS; s++) {
-  for (let g = 0; g < PER_STREAM; g++) {
-    const idx = s * PER_STREAM + g;
-    randGlyphOffset(idx);
-    // g=0 is the leading (bottom) glyph -> brightest; trail fades upward
-    aIntensity[idx] = Math.max(0, 1 - g / (PER_STREAM - 1));
-  }
-}
-geo.getAttribute('aIntensity').needsUpdate = true;
-
-const dummy = new THREE.Object3D();
-
-function writeStream(s, stream) {
-  for (let g = 0; g < PER_STREAM; g++) {
-    const idx = s * PER_STREAM + g;
-    dummy.position.set(stream.x, stream.headY + g * SPACING, stream.z);
-    dummy.updateMatrix();
-    mesh.setMatrixAt(idx, dummy.matrix);
-  }
-}
-
-// first placement
-for (let s = 0; s < STREAMS; s++) writeStream(s, streams[s]);
-mesh.instanceMatrix.needsUpdate = true;
-geo.getAttribute('aOffset').needsUpdate = true;
-
-function updateRain(dt, t) {
-  let offsetsDirty = false;
-  for (let s = 0; s < STREAMS; s++) {
-    const stream = streams[s];
-    stream.headY -= stream.speed * dt;
-    // recycle when the whole stream has fallen past the bottom
-    if (stream.headY < -BOUNDS.y - PER_STREAM * SPACING) {
-      stream.headY = BOUNDS.y + THREE.MathUtils.randFloat(2, 26);
-      placeStreamXZ(stream);
-      stream.speed = THREE.MathUtils.randFloat(5.5, 13.5);
-      for (let g = 0; g < PER_STREAM; g++) randGlyphOffset(s * PER_STREAM + g);
-      offsetsDirty = true;
-    }
-    // occasional glyph mutation
-    if (Math.random() < stream.swap) {
-      randGlyphOffset(s * PER_STREAM + Math.floor(Math.random() * PER_STREAM));
-      offsetsDirty = true;
-    }
-    writeStream(s, stream);
-  }
-  mesh.instanceMatrix.needsUpdate = true;
-  if (offsetsDirty) geo.getAttribute('aOffset').needsUpdate = true;
-}
-
-/* ---------- Post-processing ---------- */
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight),
-  1.1,   // strength
-  0.55,  // radius
-  0.12   // threshold
-);
-composer.addPass(bloom);
-
-/* ---------- Camera drift (gentle orbit + breathing dolly) ---------- */
-const lookTarget = new THREE.Vector3(0, 0, -12);
-function driftCamera(t) {
-  camera.position.x = Math.sin(t * 0.045) * 3.2;
-  camera.position.y = Math.cos(t * 0.037) * 1.8;
-  camera.position.z = CAM_BASE_Z + Math.sin(t * 0.06) * 2.2;
-  camera.lookAt(lookTarget);
-}
-
-/* ---------- Resize ---------- */
-function onResize() {
-  const w = window.innerWidth, h = window.innerHeight;
-  applyCameraProjection();
-  computeClearX();
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(w, h);
-  composer.setSize(w, h);
-  bloom.setSize(w, h);
-}
-window.addEventListener('resize', onResize);
-
-/* ---------- Loop ---------- */
-const clock = new THREE.Clock();
-let running = true;
-
-function animate() {
+let running = true, start = performance.now();
+function loop(now) {
   if (!running) return;
-  requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
-  const t = clock.elapsedTime;
-  updateRain(dt, t);
-  driftCamera(t);
-  composer.render();
+  draw((now - start) / 1000);
+  requestAnimationFrame(loop);
 }
-
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    running = false;
-  } else if (!reduceMotion && !running) {
-    running = true;
-    clock.getDelta(); // discard the long pause delta
-    animate();
-  }
+  if (document.hidden) running = false;
+  else if (!reduceMotion && !running) { running = true; requestAnimationFrame(loop); }
 });
-
-if (reduceMotion) {
-  // Calm fallback: place a single static frame, no animation loop.
-  driftCamera(0);
-  camera.position.set(0, 0, 12);
-  camera.lookAt(lookTarget);
-  composer.render();
-  running = false;
-} else {
-  animate();
-}
+if (reduceMotion) { seq.forEach((n) => (n.born = 0)); lastLap = 0; draw(CYCLE * 0.98); }
+else requestAnimationFrame(loop);

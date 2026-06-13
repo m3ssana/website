@@ -1,0 +1,17 @@
+{
+  "name": "messana.ai",
+  "short_name": "messana.ai",
+  "description": "messana.ai — a quiet signal node. A hidden melody for those who read.",
+  "start_url": "03-glass-score.html",
+  "scope": "./",
+  "id": "/concepts/03-glass-score.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fbf9ff",
+  "theme_color": "#fbf9ff",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

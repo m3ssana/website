@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#160726" />
+  <title>09 · Harmonic Bloom — messana.ai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" />
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+  <canvas class="bg" id="scene" aria-hidden="true"></canvas>
+
+  <div class="stage">
+    <h1 class="wordmark">messana<span class="ai">.ai</span></h1>
+    <span class="concept-label">harmonic bloom</span>
+  </div>
+
+  <div class="chrome" aria-hidden="true">
+    <div class="row">
+      <a class="back" href="index.html">&larr; all concepts</a>
+      <span class="tag">concept <b>09</b> // harmonic bloom</span>
+    </div>
+    <div class="row">
+      <span class="tag">harmonic series &middot; <b>never the same twice</b></span>
+    </div>
+  </div>
+
+  <script>
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cv = document.getElementById('scene');
+    const ctx = cv.getContext('2d');
+    let W, H, dpr;
+    function fit() {
+      dpr = Math.min(devicePixelRatio, 2);
+      W = innerWidth; H = innerHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#160726';
+      ctx.fillRect(0, 0, W, H);
+    }
+    fit();
+    addEventListener('resize', fit);
+
+    // harmonic ratios drawn from the overtone series
+    const base = [2, 3, 4, 5];
+    const phase = base.map(() => Math.random() * Math.PI * 2);
+    const K = 1400;
+
+    function draw(time) {
+      // soft trail instead of clear -> blooming overlap
+      ctx.fillStyle = 'rgba(22, 7, 38, 0.07)';
+      ctx.fillRect(0, 0, W, H);
+
+      const A = Math.min(W, H) * 0.32;
+      const ccx = W / 2, ccy = H * 0.5;
+      const rot = time * 0.06;
+      // slowly drifting harmonic frequencies
+      const f1 = base[0] + Math.sin(time * 0.05) * 0.15;
+      const f2 = base[1] + Math.cos(time * 0.045) * 0.15;
+      const f3 = base[2] + Math.sin(time * 0.037) * 0.12;
+      const f4 = base[3] + Math.cos(time * 0.041) * 0.12;
+      const breathe = 0.85 + 0.15 * Math.sin(time * 0.3);
+
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      for (let k = 0; k <= K; k++) {
+        const tt = (k / K) * Math.PI * 2;
+        let x = Math.sin(f1 * tt + phase[0]) + 0.5 * Math.sin(f3 * tt + phase[2]);
+        let y = Math.cos(f2 * tt + phase[1]) + 0.5 * Math.cos(f4 * tt + phase[3]);
+        x *= A * 0.66 * breathe; y *= A * 0.66 * breathe;
+        const rx = x * Math.cos(rot) - y * Math.sin(rot);
+        const ry = x * Math.sin(rot) + y * Math.cos(rot);
+        const px = ccx + rx, py = ccy + ry;
+        if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      const grad = ctx.createLinearGradient(ccx - A, ccy - A, ccx + A, ccy + A);
+      grad.addColorStop(0, 'rgba(124, 58, 237, 0.55)');
+      grad.addColorStop(0.5, 'rgba(167, 139, 250, 0.6)');
+      grad.addColorStop(1, 'rgba(216, 201, 255, 0.55)');
+      ctx.strokeStyle = grad;
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    let running = true, start = performance.now();
+    function loop(now) {
+      if (!running) return;
+      draw((now - start) / 1000);
+      requestAnimationFrame(loop);
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) running = false;
+      else if (!reduceMotion && !running) { running = true; requestAnimationFrame(loop); }
+    });
+    if (reduceMotion) { for (let k = 0; k < 40; k++) draw(k * 0.1); } else requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

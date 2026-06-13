@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#160726" />
+  <title>10 · The Duet — messana.ai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" />
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+  <canvas class="bg" id="scene" aria-hidden="true"></canvas>
+
+  <div class="stage">
+    <h1 class="wordmark">messana<span class="ai">.ai</span></h1>
+    <span class="concept-label">the duet</span>
+  </div>
+
+  <div class="chrome" aria-hidden="true">
+    <div class="row">
+      <a class="back" href="index.html">&larr; all concepts</a>
+      <span class="tag">concept <b>10</b> // the duet</span>
+    </div>
+    <div class="row">
+      <span class="tag">violin &middot; <b>ai</b> &middot; piano</span>
+    </div>
+  </div>
+
+  <script>
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cv = document.getElementById('scene');
+    const ctx = cv.getContext('2d');
+    let W, H, dpr;
+    function fit() {
+      dpr = Math.min(devicePixelRatio, 2);
+      W = innerWidth; H = innerHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    fit();
+    addEventListener('resize', fit);
+
+    const KEYS = 9;
+    const keyState = new Array(KEYS).fill(0);     // glow energy per key
+    let lastKey = 0, kstep = 0;
+    const pattern = [0, 4, 2, 6, 3, 7, 1, 5, 4, 2];
+
+    // seam particles (the AI thread)
+    const seedN = 60;
+    const seeds = Array.from({ length: seedN }, () => ({
+      y: Math.random(), v: 0.04 + Math.random() * 0.08, ph: Math.random() * 6.28,
+    }));
+
+    function leftStrings(t) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, W / 2, H); ctx.clip();
+      const rows = 6;
+      for (let r = 0; r < rows; r++) {
+        const baseY = H * (0.2 + (r / (rows - 1)) * 0.6);
+        const amp = 14 + r * 4;
+        ctx.beginPath();
+        for (let i = 0; i <= 120; i++) {
+          const nx = i / 120;
+          const x = nx * (W / 2);
+          const y = baseY + Math.sin(nx * 6 + t * 1.4 + r) * amp * Math.sin(nx * Math.PI)
+                          + Math.sin(t * 2 + r) * 4;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = `rgba(167, 139, 250, ${0.18 + r * 0.04})`;
+        ctx.lineWidth = 1.6;
+        ctx.shadowColor = 'rgba(167, 139, 250, 0.6)';
+        ctx.shadowBlur = 12;
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    function rightKeys() {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(W / 2, 0, W / 2, H); ctx.clip();
+      const x0 = W / 2, span = W / 2;
+      const kw = span / KEYS;
+      for (let k = 0; k < KEYS; k++) {
+        const x = x0 + k * kw;
+        const e = keyState[k];
+        ctx.fillStyle = `rgba(${243 - e * 60}, ${232 - e * 40}, 255, ${0.05 + e * 0.5})`;
+        ctx.fillRect(x + 2, H * 0.12, kw - 4, H * 0.76);
+        ctx.strokeStyle = 'rgba(124, 58, 237, 0.18)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 2, H * 0.12, kw - 4, H * 0.76);
+        if (e > 0.01) {
+          const g = ctx.createLinearGradient(0, H * 0.12, 0, H * 0.88);
+          g.addColorStop(0, `rgba(124, 58, 237, ${e * 0.5})`);
+          g.addColorStop(1, 'rgba(124, 58, 237, 0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(x + 2, H * 0.12, kw - 4, H * 0.76);
+        }
+        keyState[k] *= 0.94;
+      }
+      ctx.restore();
+    }
+
+    function seam(t) {
+      const sx = W / 2;
+      const g = ctx.createLinearGradient(sx - 2, 0, sx + 2, 0);
+      g.addColorStop(0, 'rgba(124, 58, 237, 0)');
+      g.addColorStop(0.5, 'rgba(216, 201, 255, 0.5)');
+      g.addColorStop(1, 'rgba(124, 58, 237, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(sx - 2, 0, 4, H);
+      ctx.globalCompositeOperation = 'lighter';
+      for (const s of seeds) {
+        s.y += s.v * 0.004;
+        if (s.y > 1) s.y -= 1;
+        const x = sx + Math.sin(t * 1.5 + s.ph) * 18;
+        const y = s.y * H;
+        const rad = ctx.createRadialGradient(x, y, 0, x, y, 7);
+        rad.addColorStop(0, 'rgba(233, 222, 255, 0.9)');
+        rad.addColorStop(1, 'rgba(124, 58, 237, 0)');
+        ctx.fillStyle = rad;
+        ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function draw(t, now) {
+      ctx.clearRect(0, 0, W, H);
+      if (now - lastKey > 520) {
+        lastKey = now;
+        keyState[pattern[kstep % pattern.length] % KEYS] = 1;
+        kstep++;
+      }
+      leftStrings(t);
+      rightKeys();
+      seam(t);
+    }
+
+    let running = true, start = performance.now();
+    function loop(now) {
+      if (!running) return;
+      draw((now - start) / 1000, now);
+      requestAnimationFrame(loop);
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) running = false;
+      else if (!reduceMotion && !running) { running = true; requestAnimationFrame(loop); }
+    });
+    if (reduceMotion) { keyState[4] = 1; keyState[2] = 0.6; draw(0.5, performance.now()); }
+    else requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

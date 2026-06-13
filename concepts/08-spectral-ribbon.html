@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#160726" />
+  <title>08 · Spectral Ribbon — messana.ai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" />
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+  <canvas class="bg" id="scene" aria-hidden="true"></canvas>
+
+  <div class="stage">
+    <h1 class="wordmark">messana<span class="ai">.ai</span></h1>
+    <span class="concept-label">spectral ribbon</span>
+  </div>
+
+  <div class="chrome" aria-hidden="true">
+    <div class="row">
+      <a class="back" href="index.html">&larr; all concepts</a>
+      <span class="tag">concept <b>08</b> // spectral ribbon</span>
+    </div>
+    <div class="row">
+      <span class="tag">bow path &middot; <b>live spectrogram</b></span>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const canvas = document.getElementById('scene');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setClearColor(0x160726, 1);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x160726, 0.018);
+    const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+    camera.position.set(0, 0, 40);
+
+    // ---- A flowing curve: the path a bow traces through space ----
+    const pts = [];
+    const STEPS = 220;
+    for (let i = 0; i <= STEPS; i++) {
+      const t = i / STEPS;
+      const x = (t - 0.5) * 78;
+      const y = Math.sin(t * Math.PI * 3.0) * 11 + Math.sin(t * Math.PI * 7.0) * 2.5;
+      const z = Math.cos(t * Math.PI * 2.0) * 14 - 8;
+      pts.push(new THREE.Vector3(x, y, z));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const tube = new THREE.TubeGeometry(curve, 600, 1.5, 28, false);
+
+    const uniforms = {
+      uTime: { value: 0 },
+      uLo:   { value: new THREE.Color(0x3b1378) },
+      uMid:  { value: new THREE.Color(0x7c3aed) },
+      uHi:   { value: new THREE.Color(0xe9deff) },
+    };
+    const material = new THREE.ShaderMaterial({
+      uniforms,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      vertexShader: /* glsl */`
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */`
+        uniform float uTime;
+        uniform vec3 uLo, uMid, uHi;
+        varying vec2 vUv;
+        void main() {
+          float x = vUv.x;
+          // fake FFT: layered traveling sines -> spectrogram column energy
+          float f = 0.0;
+          f += sin(x * 60.0  + uTime * 2.2);
+          f += 0.6 * sin(x * 130.0 - uTime * 3.1);
+          f += 0.4 * sin(x * 240.0 + uTime * 1.4);
+          float amp = 0.5 + 0.5 * (f / 2.0);
+          // banding around the tube + scroll along length
+          float band = 0.5 + 0.5 * sin(vUv.y * 6.2831 * 3.0 + uTime + x * 40.0);
+          float intensity = clamp(amp * band, 0.0, 1.0);
+          vec3 c = mix(uLo, uMid, intensity);
+          c = mix(c, uHi, pow(intensity, 4.0));
+          gl_FragColor = vec4(c, 0.35 + 0.65 * intensity);
+        }`,
+    });
+
+    const ribbon = new THREE.Mesh(tube, material);
+    scene.add(ribbon);
+
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.2, 0.65, 0.08);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+
+    function onResize() {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.setSize(innerWidth, innerHeight);
+      composer.setSize(innerWidth, innerHeight);
+      bloom.setSize(innerWidth, innerHeight);
+    }
+    addEventListener('resize', onResize);
+
+    const clock = new THREE.Clock();
+    let running = true;
+    function animate() {
+      if (!running) return;
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+      uniforms.uTime.value = t;
+      ribbon.rotation.y = Math.sin(t * 0.1) * 0.5;
+      ribbon.rotation.z = Math.sin(t * 0.05) * 0.15;
+      camera.position.x = Math.sin(t * 0.12) * 5;
+      camera.position.y = Math.cos(t * 0.09) * 3;
+      camera.lookAt(0, 0, -4);
+      composer.render();
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) running = false;
+      else if (!reduceMotion && !running) { running = true; clock.getDelta(); animate(); }
+    });
+
+    if (reduceMotion) { uniforms.uTime.value = 1.0; composer.render(); }
+    else animate();
+  </script>
+</body>
+</html>

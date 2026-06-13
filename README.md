@@ -1,6 +1,6 @@
 # messana.ai
 
-Personal landing page for **messana.ai** — a cinematic, Matrix-themed single page. v2.0 rebuilds the digital rain in 3D with [three.js](https://threejs.org/): you stand *inside* a volumetric downpour of katakana glyphs with depth-of-field, fog, a gently drifting camera, and bloom, while the `messana.ai` wordmark holds calm and centered.
+Personal landing page for **messana.ai** — v3 "The Glass Score." A quiet, royal‑purple‑on‑white wordmark floats over a music staff where a slow "AI" cursor writes a melody, note by note. The notes are a hidden transcription of Ed Sheeran's *Thinking Out Loud* (verse, D major, ~79 BPM) — a gem for those who read music. Installable as a PWA on iOS and Android.
 
 Live at <https://messana.ai>.
 
@@ -8,19 +8,37 @@ Live at <https://messana.ai>.
 
 ```
 website/
-├── index.html      Markup + SEO/structured data
+├── index.html             Markup + SEO/structured data + PWA tags
 ├── css/
-│   └── styles.css  Presentation, chrome overlay, responsive rules
+│   └── styles.css          Purple + white design system, chrome overlay, responsive rules
 ├── js/
-│   └── main.js     three.js volumetric rain, UTC clock, build hash
-└── CNAME           GitHub Pages custom domain
+│   └── main.js             UTC clock, the "Glass Score" canvas, service-worker registration
+├── manifest.webmanifest    PWA manifest (standalone, icons, theme)
+├── sw.js                   Service worker (offline app shell)
+├── icon-180/192/512.png    PWA / home-screen icons
+├── favicon.svg
+├── concepts/               Design exploration — 10 concept directions + gallery (archive)
+└── CNAME                   GitHub Pages custom domain
 ```
 
-No build step. `index.html`, `css/styles.css`, and `js/main.js` are served as-is; three.js is loaded at runtime from the unpkg CDN via an ES-module import map (`three@0.160.0`).
+No build step. Everything is served as‑is — vanilla HTML/CSS/JS, no framework, no bundler. The homepage uses the Canvas 2D API (no WebGL), so it runs without any CDN dependency beyond Google Fonts.
+
+## The effect
+
+- **The Glass Score** — a five‑line treble staff sits in the lower third. A glowing vertical "AI" cursor sweeps left→right at the song's real tempo (derived from `BPM`), revealing each note with an ink‑bleed fade and a faint melodic contour line. The key signature (two sharps) and clef are drawn in; the phrase loops.
+- **Hidden melody** — the note data is *Thinking Out Loud*; lyrics are intentionally omitted so it reads as pure notation.
+- **Live UTC clock** and the family chrome (coordinates, operator/contact names) frame the page.
+
+## PWA
+
+- `manifest.webmanifest` declares `display: standalone`, `orientation: any`, and maskable icons.
+- `sw.js` precaches the app shell and serves it offline (network‑first for navigations, cache‑first for assets, with runtime caching of Google Fonts).
+- iOS: `apple-mobile-web-app-*` tags + a PNG `apple-touch-icon`; Android/Chrome: manifest + service worker satisfy install criteria.
+- `viewport-fit=cover`, `100dvh`, and `env(safe-area-inset-*)` padding keep the chrome clear of the notch/Dynamic Island and home indicator in both orientations.
 
 ## Run locally
 
-ES modules need to be served over HTTP (not opened via `file://`):
+A service worker needs to be served over HTTP(S), not `file://`:
 
 ```bash
 # Python
@@ -30,25 +48,17 @@ python -m http.server 8000
 npx serve .
 ```
 
-Then visit <http://localhost:8000>. A network connection is required so the browser can fetch three.js from the CDN.
+Then visit <http://localhost:8000>. `localhost` is a secure context, so the PWA/service worker works there; in production GitHub Pages serves over HTTPS.
 
-## The effect
+> Note: service workers cache aggressively. After changing assets, bump the `CACHE` name in `sw.js` (currently `messana-v3-1`) or unregister via DevTools → Application.
 
-- **Volumetric rain** — many glyph streams (`InstancedMesh` + a glyph-atlas texture and a small custom shader) fall through 3D space at varying depths; near streams are large and white-hot at the leading glyph, far ones small, green, and lost in fog.
-- **Cinematic post** — `EffectComposer` + `UnrealBloomPass` for the glow; `FogExp2` for depth falloff; a slow orbit/breathing-dolly camera.
-- **Readable wordmark** — a clear vertical corridor is kept down the foreground center (`computeClearX`) so falling glyphs never drown the centered `messana.ai`.
+## Concept archive
 
-## Browser & device support
-
-Modern evergreen browsers with WebGL. Uses `100dvh`, CSS `clamp()`, and an ES-module import map.
-
-- **Mobile / iPhone** — `viewport-fit=cover` plus `env(safe-area-inset-*)` keeps the terminal chrome clear of the notch/Dynamic Island and home indicator; the camera FOV widens on portrait aspect ratios so the rain still frames well on tall screens; `devicePixelRatio` is capped at 2 for performance.
-- **Reduced motion** — `prefers-reduced-motion` renders a single calm static frame instead of the animation loop.
-- The render loop pauses while the tab is hidden.
+`concepts/` holds the ten v3 design explorations (and a gallery at `concepts/index.html`) that led to The Glass Score — including three.js pieces (Resonance Field, Latent Concerto, Spectral Ribbon) and Canvas 2D pieces. Kept as a reference; not linked from the homepage.
 
 ## Deployment
 
-Hosted on **GitHub Pages**, branch-based from `main` at `/`.
+Hosted on **GitHub Pages**, branch‑based from `main` at `/`.
 
 - Pushing to `main` triggers a Pages build (~30–60s).
 - Custom domain wired via the `CNAME` file at the repo root.

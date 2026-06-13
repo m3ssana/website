@@ -75,6 +75,7 @@ canvas.bg {
   color: var(--ink-dark);
   text-shadow: 0 0 36px rgba(124, 58, 237, 0.22);
   user-select: none;
+  transform: translateY(-8vh);   /* lift so the wordmark + staff centre as a pair */
 }
 
 .wordmark .ai {

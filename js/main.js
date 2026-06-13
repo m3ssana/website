@@ -65,7 +65,7 @@ let lastLap = -1;
 
 function staffY() {
   const landscapeShort = W > H && H < 560;   // phone on its side
-  return H * (landscapeShort ? 0.72 : 0.66);
+  return H * (landscapeShort ? 0.64 : 0.58);
 }
 function staffMargin() { return W < 700 ? 16 : Math.min(W * 0.1, 110); }
 

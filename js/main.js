@@ -101,18 +101,31 @@ function draw(time) {
   glyph('\u266F', ks, left + (small ? 32 : 46), cy - 4 * (GAP / 2), 0.7);  // ♯ on F5
   glyph('\u266F', ks, left + (small ? 42 : 58), cy - 1 * (GAP / 2), 0.7);  // ♯ on C5
 
-  // cursor sweep + per-lap reset
+  // Standard note spacing (px per beat). When the whole phrase fits, stretch to
+  // fill the staff (desktop/landscape). When it doesn't (portrait phones), keep
+  // the spacing and pan the staff to follow the writing cursor — like a scrolling score.
   const prog = (time / CYCLE) % 1;
-  const cx = x0 + prog * span;
+  const MIN_PXB = 46;
+  const fitPXB = span / totalBeats;
+  const scroll = fitPXB < MIN_PXB;
+  const PXB = scroll ? MIN_PXB : fitPXB;
+  const virtualW = totalBeats * PXB;
+  const cursorVX = prog * virtualW;
+  const camX = scroll
+    ? Math.min(Math.max(cursorVX - span * 0.45, 0), Math.max(virtualW - span, 0))
+    : 0;
+  const cx = x0 + (cursorVX - camX);
+
   const lap = Math.floor(time / CYCLE);
   if (lap !== lastLap) { lastLap = lap; seq.forEach((n) => (n.born = null)); }
 
   // reveal notes as the cursor reaches them
   seq.forEach((n) => {
-    n.x = x0 + n.startN * span;
+    n.x = x0 + (n.startN * virtualW - camX);
     if (prog >= n.startN && n.born === null) n.born = time;
   });
-  const shown = seq.filter((n) => n.born !== null);
+  // only notes that are written and currently on the staff
+  const shown = seq.filter((n) => n.born !== null && n.x >= x0 - 1 && n.x <= x1 + 1);
 
   // melodic contour
   if (shown.length > 1) {
@@ -127,7 +140,7 @@ function draw(time) {
   }
 
   // notes with ink-bleed fade-in
-  const baseR = Math.min(small ? 4 : 5, (span / seq.length) * 0.4); // shrink heads when the staff is narrow
+  const baseR = Math.min(small ? 4.5 : 5, PXB * 0.16); // size note heads to the spacing
   const stemLen = small ? 26 : 34;
   shown.forEach((n) => {
     const age = time - n.born;

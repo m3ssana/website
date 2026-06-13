@@ -27,7 +27,6 @@
 
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="stylesheet" href="css/styles.css" />
-  <script src="js/main.js" defer></script>
 
   <script type="application/ld+json">
   {
@@ -81,32 +80,38 @@
   </script>
 </head>
 <body>
-  <canvas id="rain" aria-hidden="true"></canvas>
-  <div class="grid" aria-hidden="true"></div>
+  <canvas id="scene" aria-hidden="true"></canvas>
+
   <div class="vignette" aria-hidden="true"></div>
   <div class="scanlines" aria-hidden="true"></div>
   <div class="grain" aria-hidden="true"></div>
 
-  <main class="stage">
-    <header class="chrome-row" aria-hidden="true">
-      <span class="pill"><span class="dot"></span>SYS // ONLINE</span>
-      <span class="hide-sm">// NODE_07 · LAT 27.894319° N · LON 82.668550° W</span>
-      <span id="clock" class="pill">00:00:00 UTC</span>
-    </header>
-
-    <section class="center">
-      <h1 class="wordmark" data-text="messana.ai">
-        messana<span class="dot-mark">.</span><span class="accent">ai</span>
-      </h1>
-    </section>
-
-    <footer class="chrome-row bottom" aria-hidden="true">
-      <pre class="ascii">  ▓▒░  signal locked
-  ▓▒░  operator // ron messana
-  ▓▒░  contact  // kendra messana</pre>
-      <span class="hide-sm">// © 2026 messana.ai · ronald messana · kendra messana · all systems nominal</span>
-      <span class="pill">v0.1 // BUILD_<span id="build">A1F3</span></span>
-    </footer>
+  <main class="wordmark-wrap">
+    <h1 class="wordmark">messana<span class="dot">.</span><span class="accent">ai</span>
+      <span class="sub">standing inside the rain</span>
+    </h1>
   </main>
+
+  <div class="chrome" aria-hidden="true">
+    <div class="row">
+      <span class="pill"><span class="dot-led"></span>SYS // ONLINE</span>
+      <span class="coords hide-sm">// NODE_07 &middot; LAT 27.894319&deg; N &middot; LON 82.668550&deg; W</span>
+      <span class="clock" id="clock">--:--:-- UTC</span>
+    </div>
+    <div class="row">
+      <span class="caption">operator // <b>ron messana</b> &middot; contact // <b>kendra messana</b></span>
+      <span class="pill" id="build">v2.0 // BUILD_0000</span>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

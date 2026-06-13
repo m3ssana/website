@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#160726" />
+  <title>06 · Neural Orchestra — messana.ai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" />
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+  <canvas class="bg" id="scene" aria-hidden="true"></canvas>
+
+  <div class="stage">
+    <h1 class="wordmark">messana<span class="ai">.ai</span></h1>
+    <span class="concept-label">neural orchestra</span>
+  </div>
+
+  <div class="chrome" aria-hidden="true">
+    <div class="row">
+      <a class="back" href="index.html">&larr; all concepts</a>
+      <span class="tag">concept <b>06</b> // neural orchestra</span>
+    </div>
+    <div class="row">
+      <span class="tag">nodes are notes &middot; <b>signals bloom</b></span>
+    </div>
+  </div>
+
+  <script>
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cv = document.getElementById('scene');
+    const ctx = cv.getContext('2d');
+    let W, H, dpr;
+    function fit() {
+      dpr = Math.min(devicePixelRatio, 2);
+      W = innerWidth; H = innerHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    fit();
+    addEventListener('resize', fit);
+
+    const layers = [6, 10, 10, 6];
+    const cols = layers.length;
+    function pos(li, i) {
+      const nx = 0.14 + (li / (cols - 1)) * 0.72;
+      const cnt = layers[li];
+      const ny = cnt === 1 ? 0.5 : 0.2 + (i / (cnt - 1)) * 0.6;
+      return { x: nx * W, y: ny * H };
+    }
+
+    // adjacency: out[li][i] -> [{j}]
+    const out = [];
+    for (let li = 0; li < cols - 1; li++) {
+      out[li] = [];
+      for (let i = 0; i < layers[li]; i++) {
+        const targets = new Set();
+        const k = 2 + (Math.random() * 2 | 0);
+        while (targets.size < k) targets.add((Math.random() * layers[li + 1]) | 0);
+        out[li][i] = [...targets].map((j) => ({ j }));
+      }
+    }
+
+    const flash = {};                 // "li,i" -> last fire time
+    let pulses = [];                  // {li,i,j,p,sp}
+    let ripples = [];                 // {x,y,born}
+
+    function fire(li, i, time) {
+      flash[li + ',' + i] = time;
+      if (li >= cols - 1) { const p = pos(li, i); ripples.push({ x: p.x, y: p.y, born: time }); return; }
+      const edges = out[li][i] || [];
+      for (const e of edges) {
+        if (pulses.length > 140) break;
+        if (Math.random() < 0.85) pulses.push({ li, i, j: e.j, p: 0, sp: 0.9 + Math.random() * 0.8 });
+      }
+    }
+
+    let lastSpawn = 0;
+    function draw(time) {
+      ctx.clearRect(0, 0, W, H);
+
+      // edges
+      ctx.lineWidth = 1;
+      for (let li = 0; li < cols - 1; li++)
+        for (let i = 0; i < layers[li]; i++) {
+          const a = pos(li, i);
+          for (const e of out[li][i]) {
+            const b = pos(li + 1, e.j);
+            ctx.strokeStyle = 'rgba(124, 58, 237, 0.08)';
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          }
+        }
+
+      // ripples (output harmonics)
+      ripples = ripples.filter((r) => time - r.born < 1.6);
+      for (const r of ripples) {
+        const age = (time - r.born) / 1.6;
+        ctx.strokeStyle = `rgba(216, 201, 255, ${(1 - age) * 0.6})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(r.x, r.y, 6 + age * 60, 0, 7); ctx.stroke();
+      }
+
+      // advance pulses
+      const dt = 1 / 60;
+      const arrived = [];
+      pulses.forEach((pu) => {
+        pu.p += pu.sp * dt;
+        if (pu.p >= 1) arrived.push(pu);
+      });
+      pulses = pulses.filter((pu) => pu.p < 1);
+      arrived.forEach((pu) => fire(pu.li + 1, pu.j, time));
+
+      // draw pulses
+      ctx.globalCompositeOperation = 'lighter';
+      pulses.forEach((pu) => {
+        const a = pos(pu.li, pu.i), b = pos(pu.li + 1, pu.j);
+        const x = a.x + (b.x - a.x) * pu.p;
+        const y = a.y + (b.y - a.y) * pu.p;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 9);
+        g.addColorStop(0, 'rgba(233, 222, 255, 0.95)');
+        g.addColorStop(1, 'rgba(124, 58, 237, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.fill();
+      });
+      ctx.globalCompositeOperation = 'source-over';
+
+      // nodes
+      for (let li = 0; li < cols; li++)
+        for (let i = 0; i < layers[li]; i++) {
+          const p = pos(li, i);
+          const last = flash[li + ',' + i] ?? -9;
+          const heat = Math.max(0, 1 - (time - last) / 0.6);
+          const r = 3.5 + heat * 4;
+          ctx.fillStyle = `rgba(${167 + heat * 70}, ${139 + heat * 80}, 250, ${0.5 + heat * 0.5})`;
+          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill();
+        }
+
+      // spawn input signals
+      if (time - lastSpawn > 0.45) {
+        lastSpawn = time;
+        fire(0, (Math.random() * layers[0]) | 0, time);
+      }
+    }
+
+    let running = true, start = performance.now();
+    function loop(now) {
+      if (!running) return;
+      draw((now - start) / 1000);
+      requestAnimationFrame(loop);
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) running = false;
+      else if (!reduceMotion && !running) { running = true; start = performance.now() - 1000; requestAnimationFrame(loop); }
+    });
+    if (reduceMotion) { fire(0, 2, 0); draw(0.2); } else requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

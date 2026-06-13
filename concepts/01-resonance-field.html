@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#160726" />
+  <title>01 · Resonance Field — messana.ai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" />
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+  <canvas class="bg" id="scene" aria-hidden="true"></canvas>
+
+  <div class="stage">
+    <h1 class="wordmark">messana<span class="ai">.ai</span></h1>
+    <span class="concept-label">resonance field</span>
+  </div>
+
+  <div class="chrome" aria-hidden="true">
+    <div class="row">
+      <a class="back" href="index.html">&larr; all concepts</a>
+      <span class="tag">concept <b>01</b> // resonance field</span>
+    </div>
+    <div class="row">
+      <span class="tag">strings &middot; standing waves &middot; <b>ai pulse</b></span>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const canvas = document.getElementById('scene');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setClearColor(0x160726, 1);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x160726, 0.012);
+    const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+    camera.position.set(0, 0, 34);
+
+    // ---- Build the string lattice as one LineSegments mesh ----
+    const STRINGS = 46, SEG = 120;
+    const verts = STRINGS * SEG * 2;
+    const position = new Float32Array(verts * 3); // x only meaningful; y/z set in shader
+    const aX = new Float32Array(verts);
+    const aRow = new Float32Array(verts);
+    let p = 0;
+    for (let r = 0; r < STRINGS; r++) {
+      const rowN = r / (STRINGS - 1);
+      for (let s = 0; s < SEG; s++) {
+        const x0 = s / SEG, x1 = (s + 1) / SEG;
+        aX[p] = x0; aRow[p] = rowN; position[p * 3] = x0; p++;
+        aX[p] = x1; aRow[p] = rowN; position[p * 3] = x1; p++;
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(position, 3));
+    geo.setAttribute('aX', new THREE.BufferAttribute(aX, 1));
+    geo.setAttribute('aRow', new THREE.BufferAttribute(aRow, 1));
+
+    const uniforms = {
+      uTime:  { value: 0 },
+      uPulse: { value: 0.5 },
+      uLo:    { value: new THREE.Color(0x4c1d95) },
+      uHi:    { value: new THREE.Color(0xd8c9ff) },
+    };
+    const material = new THREE.ShaderMaterial({
+      uniforms,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false,
+      vertexShader: /* glsl */`
+        uniform float uTime;
+        uniform float uPulse;
+        attribute float aX;
+        attribute float aRow;
+        varying float vAmp;
+        void main() {
+          float x = (aX - 0.5) * 64.0;
+          float y = (aRow - 0.5) * 36.0;
+          float phase = aRow * 6.2831853;
+          float wave = sin(aX * 17.0 + uTime * 2.2 + phase) * 0.5;
+          float d = aX - uPulse;
+          float pulse = exp(-d * d * 55.0);
+          float amp = wave * (0.35 + pulse * 4.0);
+          vAmp = clamp(abs(amp) * 0.45 + pulse, 0.0, 1.0);
+          vec4 mv = modelViewMatrix * vec4(x, y + amp, 0.0, 1.0);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */`
+        uniform vec3 uLo;
+        uniform vec3 uHi;
+        varying float vAmp;
+        void main() {
+          vec3 c = mix(uLo, uHi, vAmp);
+          gl_FragColor = vec4(c, 0.28 + 0.72 * vAmp);
+        }`,
+    });
+    const lattice = new THREE.LineSegments(geo, material);
+    lattice.frustumCulled = false;
+    scene.add(lattice);
+
+    // ---- Post ----
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.0, 0.6, 0.1);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+
+    // ---- Pulse: auto-sweep, nudged by pointer ----
+    let pulseTarget = 0.5;
+    addEventListener('pointermove', (e) => { pulseTarget = e.clientX / innerWidth; });
+
+    function onResize() {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.setSize(innerWidth, innerHeight);
+      composer.setSize(innerWidth, innerHeight);
+      bloom.setSize(innerWidth, innerHeight);
+    }
+    addEventListener('resize', onResize);
+
+    const clock = new THREE.Clock();
+    let running = true;
+    function animate() {
+      if (!running) return;
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+      uniforms.uTime.value = t;
+      // blend an auto sweep with the pointer target
+      const auto = 0.5 + Math.sin(t * 0.4) * 0.45;
+      uniforms.uPulse.value += ((auto * 0.4 + pulseTarget * 0.6) - uniforms.uPulse.value) * 0.05;
+      camera.position.x = Math.sin(t * 0.08) * 3;
+      camera.position.y = Math.cos(t * 0.06) * 1.6;
+      camera.lookAt(0, 0, 0);
+      composer.render();
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) running = false;
+      else if (!reduceMotion && !running) { running = true; clock.getDelta(); animate(); }
+    });
+
+    if (reduceMotion) { uniforms.uTime.value = 1.5; composer.render(); }
+    else animate();
+  </script>
+</body>
+</html>

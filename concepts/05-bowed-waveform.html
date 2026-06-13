@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#160726" />
+  <title>05 · Bowed Waveform — messana.ai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" />
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+  <canvas class="bg" id="scene" aria-hidden="true"></canvas>
+
+  <div class="stage">
+    <h1 class="wordmark">messana<span class="ai">.ai</span></h1>
+    <span class="concept-label">bowed waveform</span>
+  </div>
+
+  <div class="chrome" aria-hidden="true">
+    <div class="row">
+      <a class="back" href="index.html">&larr; all concepts</a>
+      <span class="tag">concept <b>05</b> // bowed waveform</span>
+    </div>
+    <div class="row">
+      <span class="tag">one string &middot; <b>living vibrato</b></span>
+    </div>
+  </div>
+
+  <script>
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cv = document.getElementById('scene');
+    const ctx = cv.getContext('2d');
+    let W, H, dpr;
+    function fit() {
+      dpr = Math.min(devicePixelRatio, 2);
+      W = innerWidth; H = innerHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    fit();
+    addEventListener('resize', fit);
+
+    // a "note" sets base frequency; it drifts every few seconds
+    let freq = 5, freqTarget = 5, nextNote = 0;
+    const SCALE = [3, 4, 5, 6, 7, 8];
+
+    function waveY(nx, t, amp) {
+      // bowed string: fundamental + harmonics, vibrato envelope, traveling phase
+      const env = Math.sin(nx * Math.PI);               // pinned at both ends
+      const vibrato = 1 + 0.12 * Math.sin(t * 6.0);
+      let y = Math.sin(nx * freq * Math.PI * 2 - t * 2.0) * 1.0;
+      y += 0.45 * Math.sin(nx * freq * 2 * Math.PI * 2 - t * 3.1);
+      y += 0.28 * Math.sin(nx * freq * 3 * Math.PI * 2 + t * 1.7);
+      return y * env * amp * vibrato;
+    }
+
+    function strand(t, amp, alpha, lw, hue) {
+      ctx.beginPath();
+      const steps = 220;
+      const midY = H * 0.5;
+      for (let i = 0; i <= steps; i++) {
+        const nx = i / steps;
+        const x = nx * W;
+        const y = midY + waveY(nx, t, amp);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = hue.replace('A', alpha);
+      ctx.lineWidth = lw;
+      ctx.shadowColor = 'rgba(167, 139, 250, 0.9)';
+      ctx.shadowBlur = 24;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    function draw(t) {
+      ctx.clearRect(0, 0, W, H);
+      if (t > nextNote) {
+        freqTarget = SCALE[(Math.random() * SCALE.length) | 0];
+        nextNote = t + 2.4 + Math.random() * 2;
+      }
+      freq += (freqTarget - freq) * 0.02;
+
+      const baseAmp = Math.min(H, W) * 0.16;
+      // layered strands for depth (a faint echo trio)
+      strand(t - 0.18, baseAmp * 0.7, '0.10', 6, 'rgba(76, 29, 149, A)');
+      strand(t - 0.09, baseAmp * 0.88, '0.22', 3.5, 'rgba(124, 58, 237, A)');
+      strand(t, baseAmp, '0.95', 2, 'rgba(216, 201, 255, A)');
+
+      // bow contact glow that rides the wave
+      const bx = (0.5 + 0.4 * Math.sin(t * 0.5));
+      const gx = bx * W;
+      const gy = H * 0.5 + waveY(bx, t, baseAmp);
+      const halo = ctx.createRadialGradient(gx, gy, 0, gx, gy, 60);
+      halo.addColorStop(0, 'rgba(233, 222, 255, 0.8)');
+      halo.addColorStop(1, 'rgba(124, 58, 237, 0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(gx, gy, 60, 0, 7); ctx.fill();
+    }
+
+    let running = true, start = performance.now();
+    function loop(now) {
+      if (!running) return;
+      draw((now - start) / 1000);
+      requestAnimationFrame(loop);
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) running = false;
+      else if (!reduceMotion && !running) { running = true; start = performance.now(); requestAnimationFrame(loop); }
+    });
+    if (reduceMotion) { draw(0.6); } else requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

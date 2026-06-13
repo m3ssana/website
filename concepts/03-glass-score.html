@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#fbf9ff" />
+  <title>03 · The Glass Score — messana.ai</title>
+
+  <!-- PWA (installable on iOS + Android, standalone) -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="messana.ai" />
+  <meta name="application-name" content="messana.ai" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" />
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body class="light">
+  <canvas class="bg" id="scene" aria-hidden="true"></canvas>
+
+  <div class="stage">
+    <h1 class="wordmark">messana<span class="ai">.ai</span></h1>
+  </div>
+
+  <div class="chrome" aria-hidden="true">
+    <div class="row">
+      <a class="back" href="index.html">&larr; all concepts</a>
+      <span class="tag">// LAT 27.894319&deg; N &middot; LON 82.668550&deg; W</span>
+      <span class="tag" id="clock">--:--:-- UTC</span>
+    </div>
+    <div class="row">
+      <span class="tag">operator // <b>ron messana</b> &middot; contact // <b>kendra messana</b></span>
+    </div>
+  </div>
+
+  <script>
+    // PWA: register the service worker (relative path -> scope = /concepts/)
+    if ('serviceWorker' in navigator) {
+      addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    }
+
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cv = document.getElementById('scene');
+    const ctx = cv.getContext('2d');
+    let W, H, dpr;
+    function fit() {
+      dpr = Math.min(devicePixelRatio, 2);
+      W = innerWidth; H = innerHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    fit();
+    addEventListener('resize', fit);
+
+    // live UTC timestamp
+    const clockEl = document.getElementById('clock');
+    function tickClock() {
+      const d = new Date();
+      const hh = String(d.getUTCHours()).padStart(2, '0');
+      const mm = String(d.getUTCMinutes()).padStart(2, '0');
+      const ss = String(d.getUTCSeconds()).padStart(2, '0');
+      clockEl.textContent = `${hh}:${mm}:${ss} UTC`;
+    }
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    const ROYAL = '124, 58, 237';
+    const LINES = 5, GAP = 16;
+    const BPM = 79;   // "Thinking Out Loud" tempo (4/4)
+
+    // --- "Thinking Out Loud" (Ed Sheeran) — verse, D major (two sharps: F#, C#).
+    // Transcribed by ear within the song's known frame (D major, 4/4, ~79 BPM,
+    // fully diatonic over I-IV-V); transposed up one octave to sit on the treble
+    // staff. Each entry: [letter, octave, beats, lyric] (sharps come from the key sig).
+    const LETTER = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+    const THEME = [
+      ['A', 4, 0.5, 'When'], ['B', 4, 0.5, 'your'],
+      ['D', 5, 0.75, 'legs'], ['D', 5, 0.5, 'don\u2019t'], ['D', 5, 0.5, 'work'], ['D', 5, 0.5, 'like'], ['D', 5, 0.5, 'they'],
+      ['E', 5, 0.5, 'used'], ['F', 5, 0.5, 'to'], ['E', 5, 0.75, 'be-'], ['D', 5, 1, 'fore'],
+      ['A', 4, 0.5, 'and'], ['B', 4, 0.5, 'I'],
+      ['D', 5, 0.5, 'can\u2019t'], ['D', 5, 0.5, 'sweep'], ['D', 5, 0.5, 'you'],
+      ['E', 5, 0.5, 'off'], ['D', 5, 0.5, 'of'], ['B', 4, 0.5, 'your'], ['A', 4, 1.5, 'feet'],
+    ];
+    const totalBeats = THEME.reduce((s, n) => s + n[2], 0);
+    const CYCLE = totalBeats * 60 / BPM;   // one sweep = the phrase at the real tempo
+    let acc = 0;
+    const seq = THEME.map((n) => {
+      const startN = acc / totalBeats;
+      acc += n[2];
+      const deg = n[1] * 7 + LETTER[n[0]] - 34; // diatonic steps from B4 (centre line)
+      return { deg, lyric: n[3], startN, x: 0, born: null };
+    });
+    let lastLap = -1;
+
+    function staffY() { return H * 0.66; }
+    function staffMargin() { return Math.min(W * 0.1, 110); }
+
+    function glyph(ch, size, x, y, alpha, align) {
+      ctx.fillStyle = `rgba(${ROYAL}, ${alpha})`;
+      ctx.font = `${size}px 'Segoe UI Symbol', 'Noto Music', serif`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = align || 'left';
+      ctx.fillText(ch, x, y);
+    }
+
+    function draw(time) {
+      ctx.clearRect(0, 0, W, H);
+      const cy = staffY();
+      const left = staffMargin();
+      const x0 = left + 76;            // notes start after clef + key signature
+      const x1 = W - staffMargin();
+      const span = x1 - x0;
+
+      // staff lines
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(${ROYAL}, 0.22)`;
+      for (let i = 0; i < LINES; i++) {
+        const y = cy + (i - (LINES - 1) / 2) * GAP;
+        ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(x1, y); ctx.stroke();
+      }
+
+      // treble clef + D-major key signature (F# on the top line, C# in the 3rd space)
+      glyph('\uD834\uDD1E', 56, left + 2, cy + 3, 0.8);  // 𝄞
+      glyph('\u266F', 22, left + 46, cy - 4 * (GAP / 2), 0.7);  // ♯ on F5
+      glyph('\u266F', 22, left + 58, cy - 1 * (GAP / 2), 0.7);  // ♯ on C5
+
+      // cursor sweep + per-lap reset
+      const prog = (time / CYCLE) % 1;
+      const cx = x0 + prog * span;
+      const lap = Math.floor(time / CYCLE);
+      if (lap !== lastLap) { lastLap = lap; seq.forEach((n) => (n.born = null)); }
+
+      // reveal notes as the cursor reaches them
+      seq.forEach((n) => {
+        n.x = x0 + n.startN * span;
+        if (prog >= n.startN && n.born === null) n.born = time;
+      });
+      const shown = seq.filter((n) => n.born !== null);
+
+      // melodic contour
+      if (shown.length > 1) {
+        ctx.strokeStyle = `rgba(${ROYAL}, 0.16)`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        shown.forEach((n, i) => {
+          const ny = cy - n.deg * (GAP / 2);
+          if (i === 0) ctx.moveTo(n.x, ny); else ctx.lineTo(n.x, ny);
+        });
+        ctx.stroke();
+      }
+
+      // notes with ink-bleed fade-in
+      const baseR = Math.min(5, (span / seq.length) * 0.4); // shrink heads when the staff is narrow
+      shown.forEach((n) => {
+        const age = time - n.born;
+        const ny = cy - n.deg * (GAP / 2);
+        const grow = Math.min(age / 0.35, 1);
+        const r = baseR + (1 - grow) * 6;
+        const a = Math.min(age / 0.3, 1) * 0.92;
+
+        // ledger lines for notes beyond the staff
+        ctx.strokeStyle = `rgba(${ROYAL}, ${a * 0.7})`;
+        ctx.lineWidth = 1;
+        if (n.deg > 4) for (let d = 6; d <= n.deg; d += 2) { const ly = cy - d * (GAP / 2); ctx.beginPath(); ctx.moveTo(n.x - 11, ly); ctx.lineTo(n.x + 11, ly); ctx.stroke(); }
+        if (n.deg < -4) for (let d = -6; d >= n.deg; d -= 2) { const ly = cy - d * (GAP / 2); ctx.beginPath(); ctx.moveTo(n.x - 11, ly); ctx.lineTo(n.x + 11, ly); ctx.stroke(); }
+
+        // note head
+        ctx.fillStyle = `rgba(${ROYAL}, ${a})`;
+        ctx.beginPath(); ctx.ellipse(n.x, ny, r * 1.25, r, -0.35, 0, 7); ctx.fill();
+
+        // stem: down for high notes, up for low
+        ctx.strokeStyle = `rgba(${ROYAL}, ${a * 0.75})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        if (n.deg >= 1) { ctx.moveTo(n.x - r * 1.1, ny); ctx.lineTo(n.x - r * 1.1, ny + 34); }
+        else { ctx.moveTo(n.x + r * 1.1, ny); ctx.lineTo(n.x + r * 1.1, ny - 34); }
+        ctx.stroke();
+      });
+
+      // AI cursor: glowing vertical line with a soft halo
+      const grad = ctx.createLinearGradient(cx, cy - 70, cx, cy + 70);
+      grad.addColorStop(0, `rgba(${ROYAL}, 0)`);
+      grad.addColorStop(0.5, `rgba(${ROYAL}, 0.9)`);
+      grad.addColorStop(1, `rgba(${ROYAL}, 0)`);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(cx, cy - 70); ctx.lineTo(cx, cy + 70); ctx.stroke();
+      ctx.fillStyle = `rgba(${ROYAL}, 0.9)`;
+      ctx.beginPath(); ctx.arc(cx, cy - 78, 3.5, 0, 7); ctx.fill();
+    }
+
+    let running = true, start = performance.now();
+    function loop(now) {
+      if (!running) return;
+      draw((now - start) / 1000);
+      requestAnimationFrame(loop);
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) running = false;
+      else if (!reduceMotion && !running) { running = true; requestAnimationFrame(loop); }
+    });
+    if (reduceMotion) { seq.forEach((n) => (n.born = 0)); lastLap = 0; draw(CYCLE * 0.98); }
+    else requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

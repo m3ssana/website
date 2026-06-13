@@ -122,6 +122,10 @@ canvas.bg {
   .tag { white-space: normal; }
 }
 
+@media (orientation: landscape) and (max-height: 560px) {
+  .wordmark { font-size: clamp(1.8rem, 8vh, 3.4rem); }
+}
+
 @media (orientation: landscape) and (max-height: 480px) {
   .chrome { font-size: 0.58rem; letter-spacing: 0.05em; }
   .chrome .row { gap: 0.4rem 0.7rem; flex-wrap: wrap; }

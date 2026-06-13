@@ -63,8 +63,11 @@ const seq = THEME.map((n) => {
 });
 let lastLap = -1;
 
-function staffY() { return H * 0.66; }
-function staffMargin() { return Math.min(W * 0.1, 110); }
+function staffY() {
+  const landscapeShort = W > H && H < 560;   // phone on its side
+  return H * (landscapeShort ? 0.72 : 0.66);
+}
+function staffMargin() { return W < 700 ? 16 : Math.min(W * 0.1, 110); }
 
 function glyph(ch, size, x, y, alpha, align) {
   ctx.fillStyle = `rgba(${ROYAL}, ${alpha})`;
@@ -78,7 +81,9 @@ function draw(time) {
   ctx.clearRect(0, 0, W, H);
   const cy = staffY();
   const left = staffMargin();
-  const x0 = left + 76;            // notes start after clef + key signature
+  const small = Math.min(W, H) < 560;        // phone-sized viewport
+  const clefSize = small ? 42 : 56;
+  const x0 = left + (small ? 54 : 76);        // notes start after clef + key signature
   const x1 = W - staffMargin();
   const span = x1 - x0;
 
@@ -91,9 +96,10 @@ function draw(time) {
   }
 
   // treble clef + D-major key signature (F# on the top line, C# in the 3rd space)
-  glyph('\uD834\uDD1E', 56, left + 2, cy + 3, 0.8);  // 𝄞
-  glyph('\u266F', 22, left + 46, cy - 4 * (GAP / 2), 0.7);  // ♯ on F5
-  glyph('\u266F', 22, left + 58, cy - 1 * (GAP / 2), 0.7);  // ♯ on C5
+  const ks = small ? 17 : 22;
+  glyph('\uD834\uDD1E', clefSize, left + 2, cy + 3, 0.8);  // 𝄞
+  glyph('\u266F', ks, left + (small ? 32 : 46), cy - 4 * (GAP / 2), 0.7);  // ♯ on F5
+  glyph('\u266F', ks, left + (small ? 42 : 58), cy - 1 * (GAP / 2), 0.7);  // ♯ on C5
 
   // cursor sweep + per-lap reset
   const prog = (time / CYCLE) % 1;
@@ -121,7 +127,8 @@ function draw(time) {
   }
 
   // notes with ink-bleed fade-in
-  const baseR = Math.min(5, (span / seq.length) * 0.4); // shrink heads when the staff is narrow
+  const baseR = Math.min(small ? 4 : 5, (span / seq.length) * 0.4); // shrink heads when the staff is narrow
+  const stemLen = small ? 26 : 34;
   shown.forEach((n) => {
     const age = time - n.born;
     const ny = cy - n.deg * (GAP / 2);
@@ -143,21 +150,22 @@ function draw(time) {
     ctx.strokeStyle = `rgba(${ROYAL}, ${a * 0.75})`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    if (n.deg >= 1) { ctx.moveTo(n.x - r * 1.1, ny); ctx.lineTo(n.x - r * 1.1, ny + 34); }
-    else { ctx.moveTo(n.x + r * 1.1, ny); ctx.lineTo(n.x + r * 1.1, ny - 34); }
+    if (n.deg >= 1) { ctx.moveTo(n.x - r * 1.1, ny); ctx.lineTo(n.x - r * 1.1, ny + stemLen); }
+    else { ctx.moveTo(n.x + r * 1.1, ny); ctx.lineTo(n.x + r * 1.1, ny - stemLen); }
     ctx.stroke();
   });
 
   // AI cursor: glowing vertical line with a soft halo
-  const grad = ctx.createLinearGradient(cx, cy - 70, cx, cy + 70);
+  const cursorH = small ? 46 : 70;
+  const grad = ctx.createLinearGradient(cx, cy - cursorH, cx, cy + cursorH);
   grad.addColorStop(0, `rgba(${ROYAL}, 0)`);
   grad.addColorStop(0.5, `rgba(${ROYAL}, 0.9)`);
   grad.addColorStop(1, `rgba(${ROYAL}, 0)`);
   ctx.strokeStyle = grad;
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(cx, cy - 70); ctx.lineTo(cx, cy + 70); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - cursorH); ctx.lineTo(cx, cy + cursorH); ctx.stroke();
   ctx.fillStyle = `rgba(${ROYAL}, 0.9)`;
-  ctx.beginPath(); ctx.arc(cx, cy - 78, 3.5, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy - (cursorH + 8), 3.5, 0, 7); ctx.fill();
 }
 
 let running = true, start = performance.now();

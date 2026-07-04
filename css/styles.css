@@ -1,7 +1,8 @@
 /* ============================================================
-   messana.ai — v3 "The Glass Score"
-   Royal purple + white. A quiet wordmark over a staff where a
-   hidden melody is written, note by note.
+   messana.ai — v4 "Signal"
+   Royal purple on deep aubergine. A quiet wordmark for the
+   Messana family over a living neural constellation — a small,
+   connected signal node, rendered in glass and light.
    ============================================================ */
 
 :root {
@@ -13,14 +14,11 @@
   --lilac:     #d8c9ff;
 
   --white:  #ffffff;
-  --ivory:  #fbf9ff;
-  --ink:    #f3e8ff;                       /* light text on dark */
-  --ink-dim: rgba(243, 232, 255, 0.55);
-  --ink-dark: #2e1065;                      /* dark text on light */
-  --ink-dark-dim: rgba(46, 16, 101, 0.55);
+  --ink:       #f3e8ff;                       /* light text on dark */
+  --ink-dim:   rgba(224, 213, 255, 0.86);     /* subhead — lifted for contrast */
+  --ink-faint: rgba(216, 201, 255, 0.72);     /* chrome — lifted for contrast */
 
-  --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
-  --mono:  'IBM Plex Mono', 'Courier New', monospace;
+  --mono:  'IBM Plex Mono', 'SFMono-Regular', 'Consolas', 'Courier New', monospace;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
@@ -37,25 +35,20 @@ html, body {
 body {
   min-height: 100dvh;
   font-family: var(--mono);
-  color: var(--ink-dark);
+  color: var(--ink);
 
-  /* "Light in a room," not wallpaper: a soft warm-white spotlight pools
-     behind the wordmark, fading to a faintly violet-tinted ivory at the
-     edges (implicit vignette), over a vertical wash that cools toward the
-     lower third so the staff feels seated rather than floating. Pure CSS,
-     no frame cost; the canvas clears to transparent and rides on top. */
+  /* The graceful fallback. If WebGL never loads, this deep-violet wash — a warm
+     core glow pooling behind the wordmark over a cooling aubergine field — stands
+     on its own so the wordmark never floats on a void. When the canvas paints, it
+     rides opaque on top; the wash returns instantly if the backdrop is unavailable. */
   background:
-    radial-gradient(135% 100% at 50% 40%,
-      #ffffff 0%,
-      rgba(255, 255, 255, 0) 58%),
-    linear-gradient(180deg,
-      var(--ivory) 0%,
-      #f4ecff 60%,
-      #ede4ff 100%);
-  background-attachment: fixed;   /* keep the wash put on mobile address-bar resize */
+    radial-gradient(120% 95% at 50% 40%, rgba(124, 58, 237, 0.20), transparent 60%),
+    radial-gradient(90% 80% at 50% 118%, rgba(76, 29, 149, 0.30), transparent 62%),
+    linear-gradient(180deg, #1c0a33 0%, var(--aubergine) 58%, #0c0416 100%);
+  background-attachment: fixed;
 }
 
-/* --- Canvas score (full bleed) --- */
+/* --- Canvas constellation (full bleed) --- */
 canvas.bg {
   position: fixed;
   inset: 0;
@@ -65,7 +58,20 @@ canvas.bg {
   z-index: 0;
 }
 
-/* --- Centered wordmark --- */
+/* --- Readability veil: sits between the constellation and the text so glyphs stay
+   legible over bright bloom, without dimming the corners of the scene. A soft central
+   pool lifts the wordmark; gentle top/bottom bands lift the chrome. --- */
+.veil {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(56% 40% at 50% 50%, rgba(9, 3, 17, 0.58) 0%, rgba(9, 3, 17, 0.30) 46%, transparent 72%),
+    linear-gradient(180deg, rgba(9, 3, 17, 0.42) 0%, transparent 15%, transparent 84%, rgba(9, 3, 17, 0.46) 100%);
+}
+
+/* --- Centered wordmark (terminal monospace) --- */
 .stage {
   position: fixed;
   inset: 0;
@@ -80,21 +86,43 @@ canvas.bg {
 }
 
 .wordmark {
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: clamp(2.8rem, 11vw, 8rem);
-  line-height: 0.95;
-  letter-spacing: -0.02em;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: clamp(2.5rem, 10vw, 7rem);
+  line-height: 0.98;
+  letter-spacing: -0.01em;
   white-space: nowrap;
-  color: var(--ink-dark);
-  text-shadow: 0 0 36px rgba(124, 58, 237, 0.22);
+  color: var(--ink);
+  /* Layered halo: a crisp dark edge + a soft dark bloom for separation from bright
+     nodes, then the brand purple glow on top. */
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 4px 26px rgba(0, 0, 0, 0.5),
+    0 0 44px rgba(124, 58, 237, 0.4);
   user-select: none;
-  transform: translateY(-8vh);   /* lift so the wordmark + staff centre as a pair */
+  animation: rise 1.1s var(--ease) both;
 }
 
 .wordmark .ai {
-  font-style: italic;
-  color: var(--royal);
+  color: var(--amethyst);
+}
+
+.tagline {
+  margin-top: 1.4rem;
+  font-family: var(--mono);
+  font-weight: 400;
+  font-size: clamp(0.64rem, 1.5vw, 0.82rem);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55);
+  user-select: none;
+  animation: rise 1.1s var(--ease) 0.18s both;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* --- Chrome overlay (coords, clock, names) --- */
@@ -111,7 +139,7 @@ canvas.bg {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  font-size: clamp(0.6rem, 1.4vw, 0.72rem);
+  font-size: clamp(0.62rem, 1.4vw, 0.72rem);
   letter-spacing: 0.18em;
 }
 
@@ -121,28 +149,106 @@ canvas.bg {
   justify-content: space-between;
   gap: 1rem;
 }
+/* Reserve the bottom-right corner for the info button so the names never run under it. */
+.chrome .row:last-child { padding-right: 3rem; }
 
 .tag {
-  color: var(--ink-dark-dim);
+  color: var(--ink-faint);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
   white-space: nowrap;
 }
-.tag b { color: var(--royal); font-weight: 500; }
+.tag b { color: var(--lilac); font-weight: 500; }
 
-/* --- Phones: keep chrome text from clipping under the notch / off-screen.
-   Safe-area insets are already in .chrome padding; here we let the rows
+/* --- Info affordance: a subtle disclosure explaining the backdrop's AI metaphor.
+   Quiet by default, brighter on hover/focus; opens a small readable popover. --- */
+.info {
+  position: fixed;
+  right: calc(0.9rem + env(safe-area-inset-right));
+  bottom: calc(0.9rem + env(safe-area-inset-bottom));
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.25s var(--ease), background-color 0.25s var(--ease);
+}
+.info svg { display: block; filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.65)); }
+.info:hover,
+.info:focus-visible { color: var(--lilac); background: rgba(167, 139, 250, 0.14); }
+.info:focus-visible { outline: 2px solid var(--amethyst); outline-offset: 3px; }
+
+.info-panel {
+  position: fixed;
+  right: calc(0.9rem + env(safe-area-inset-right));
+  bottom: calc(3.6rem + env(safe-area-inset-bottom));
+  z-index: 5;
+  display: block;
+  width: min(21rem, calc(100vw - 2rem));
+  padding: 0.95rem 1.05rem 1.05rem;
+  background: rgba(18, 7, 33, 0.94);
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  border-radius: 0.7rem;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: var(--ink-dim);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  letter-spacing: 0.015em;
+  text-align: left;
+  pointer-events: auto;
+  animation: pop 0.28s var(--ease) both;
+}
+.info-panel[hidden] { display: none; }
+.info-panel:focus { outline: none; }
+.info-panel p + p { margin-top: 0.6rem; }
+.info-panel b { color: var(--lilac); font-weight: 500; }
+.info-title {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.55rem;
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* --- Phones: keep chrome text from clipping under the notch / off-screen, and keep
+   it readable. Safe-area insets are already in .chrome padding; here we let the rows
    wrap and shrink so the lat/long, clock, and names stay fully visible. --- */
 @media (max-width: 600px) {
-  .chrome { font-size: 0.6rem; letter-spacing: 0.08em; }
-  .chrome .row { gap: 0.5rem 0.8rem; flex-wrap: wrap; }
+  .stage { padding: 1rem; }
+  .chrome { font-size: 0.64rem; letter-spacing: 0.07em; }
+  .chrome .row { gap: 0.4rem 0.8rem; flex-wrap: wrap; }
   .tag { white-space: normal; }
+  .tagline { letter-spacing: 0.24em; }
+  /* A touch more central lift on small, busy screens. */
+  .veil {
+    background:
+      radial-gradient(72% 34% at 50% 48%, rgba(9, 3, 17, 0.62) 0%, rgba(9, 3, 17, 0.32) 50%, transparent 74%),
+      linear-gradient(180deg, rgba(9, 3, 17, 0.5) 0%, transparent 17%, transparent 80%, rgba(9, 3, 17, 0.54) 100%);
+  }
 }
 
 @media (orientation: landscape) and (max-height: 560px) {
-  .wordmark { font-size: clamp(1.8rem, 8vh, 3.4rem); }
+  .wordmark { font-size: clamp(1.8rem, 7.5vh, 3.2rem); }
+  .tagline { margin-top: 0.9rem; }
 }
 
 @media (orientation: landscape) and (max-height: 480px) {
-  .chrome { font-size: 0.58rem; letter-spacing: 0.05em; }
+  .chrome { font-size: 0.6rem; letter-spacing: 0.05em; }
   .chrome .row { gap: 0.4rem 0.7rem; flex-wrap: wrap; }
   .tag { white-space: normal; }
 }

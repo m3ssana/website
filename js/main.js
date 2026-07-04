@@ -1,8 +1,12 @@
 /* ============================================================
-   messana.ai — v3 "The Glass Score"
-   A UTC clock, and a hidden melody written onto a staff by a
-   slow "AI" cursor. The notes are Ed Sheeran's "Thinking Out
-   Loud" (verse, D major) — a quiet gem for those who read music.
+   messana.ai — v4 "Signal"
+   A minimalistic, AI-themed landing page for the Messana family.
+   A slow-drifting neural constellation — glowing nodes joined by
+   "signal" edges that form and dissolve as the graph rewires —
+   sits behind the wordmark: the family as one small, connected
+   signal node, rendered in glass and light.
+   three.js r0.160 · additive GPU points + UnrealBloom · graceful
+   fallback to the CSS backdrop when WebGL/CDN is unavailable.
    ============================================================ */
 
 /* PWA: register the service worker (root scope) */
@@ -10,186 +14,330 @@ if ('serviceWorker' in navigator) {
   addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
 
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const cv = document.getElementById('scene');
-const ctx = cv.getContext('2d');
-let W, H, dpr;
-function fit() {
-  dpr = Math.min(devicePixelRatio, 2);
-  W = innerWidth; H = innerHeight;
-  cv.width = W * dpr; cv.height = H * dpr;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-fit();
-addEventListener('resize', fit);
-
-/* live UTC timestamp */
+/* Live UTC timestamp — the signal node's heartbeat. */
 const clockEl = document.getElementById('clock');
 function tickClock() {
   const d = new Date();
-  const hh = String(d.getUTCHours()).padStart(2, '0');
-  const mm = String(d.getUTCMinutes()).padStart(2, '0');
-  const ss = String(d.getUTCSeconds()).padStart(2, '0');
-  clockEl.textContent = `${hh}:${mm}:${ss} UTC`;
+  const p = (n) => String(n).padStart(2, '0');
+  clockEl.textContent = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} UTC`;
 }
 tickClock();
 setInterval(tickClock, 1000);
 
-const ROYAL = '124, 58, 237';
-const LINES = 5, GAP = 16;
-const BPM = 79;   // "Thinking Out Loud" tempo (4/4)
+/* "About the backdrop" — a subtle disclosure explaining the AI metaphor.
+   Lives outside the WebGL path so it works even if three.js never loads. */
+(function aboutPanel() {
+  const btn = document.getElementById('info-btn');
+  const panel = document.getElementById('about');
+  if (!btn || !panel) return;
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+  const onOutside = (e) => { if (!panel.contains(e.target) && !btn.contains(e.target)) close(false); };
+  function open() {
+    panel.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    panel.focus();
+    addEventListener('keydown', onKey);
+    addEventListener('pointerdown', onOutside, true);
+  }
+  function close(returnFocus = true) {
+    panel.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    removeEventListener('keydown', onKey);
+    removeEventListener('pointerdown', onOutside, true);
+    if (returnFocus) btn.focus();
+  }
+  btn.addEventListener('click', () => (panel.hidden ? open() : close()));
+})();
 
-// --- "Thinking Out Loud" (Ed Sheeran) — verse, D major (two sharps: F#, C#).
-// Transcribed by ear within the song's known frame (D major, 4/4, ~79 BPM,
-// fully diatonic over I-IV-V); transposed up one octave to sit on the treble
-// staff. Each entry: [letter, octave, beats, lyric] (sharps come from the key sig).
-const LETTER = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
-const THEME = [
-  ['A', 4, 0.5, 'When'], ['B', 4, 0.5, 'your'],
-  ['D', 5, 0.75, 'legs'], ['D', 5, 0.5, 'don\u2019t'], ['D', 5, 0.5, 'work'], ['D', 5, 0.5, 'like'], ['D', 5, 0.5, 'they'],
-  ['E', 5, 0.5, 'used'], ['F', 5, 0.5, 'to'], ['E', 5, 0.75, 'be-'], ['D', 5, 1, 'fore'],
-  ['A', 4, 0.5, 'and'], ['B', 4, 0.5, 'I'],
-  ['D', 5, 0.5, 'can\u2019t'], ['D', 5, 0.5, 'sweep'], ['D', 5, 0.5, 'you'],
-  ['E', 5, 0.5, 'off'], ['D', 5, 0.5, 'of'], ['B', 4, 0.5, 'your'], ['A', 4, 1.5, 'feet'],
-];
-const totalBeats = THEME.reduce((s, n) => s + n[2], 0);
-const CYCLE = totalBeats * 60 / BPM;   // one sweep = the phrase at the real tempo
-let acc = 0;
-const seq = THEME.map((n) => {
-  const startN = acc / totalBeats;
-  acc += n[2];
-  const deg = n[1] * 7 + LETTER[n[0]] - 34; // diatonic steps from B4 (centre line)
-  return { deg, startN, x: 0, born: null };
-});
-let lastLap = -1;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const canvas = document.getElementById('scene');
 
-function staffY() {
-  const landscapeShort = W > H && H < 560;   // phone on its side
-  return H * (landscapeShort ? 0.64 : 0.58);
+/* The WebGL backdrop is a progressive enhancement. If three.js can't load
+   (offline first visit, CDN hiccup, ancient browser), we hide the canvas and
+   the CSS gradient carries the page — the wordmark never sits on a void.
+   Dynamic import keeps the clock + service worker alive regardless. */
+boot();
+
+async function boot() {
+  let THREE, EffectComposer, RenderPass, UnrealBloomPass, OutputPass;
+  try {
+    THREE = await import('three');
+    ({ EffectComposer } = await import('three/addons/postprocessing/EffectComposer.js'));
+    ({ RenderPass } = await import('three/addons/postprocessing/RenderPass.js'));
+    ({ UnrealBloomPass } = await import('three/addons/postprocessing/UnrealBloomPass.js'));
+    ({ OutputPass } = await import('three/addons/postprocessing/OutputPass.js'));
+  } catch (err) {
+    canvas.style.display = 'none';   // stand down; let the CSS backdrop shine
+    return;
+  }
+  signal(THREE, { EffectComposer, RenderPass, UnrealBloomPass, OutputPass });
 }
-function staffMargin() { return W < 700 ? 16 : Math.min(W * 0.1, 110); }
 
-function glyph(ch, size, x, y, alpha, align) {
-  ctx.fillStyle = `rgba(${ROYAL}, ${alpha})`;
-  ctx.font = `${size}px 'Segoe UI Symbol', 'Noto Music', serif`;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = align || 'left';
-  ctx.fillText(ch, x, y);
-}
+function signal(THREE, { EffectComposer, RenderPass, UnrealBloomPass, OutputPass }) {
+  const AUBERGINE = 0x160726;
+  const small = Math.min(innerWidth, innerHeight) < 560;   // scale cost to the viewport
 
-function draw(time) {
-  ctx.clearRect(0, 0, W, H);
-  const cy = staffY();
-  const left = staffMargin();
-  const small = Math.min(W, H) < 560;        // phone-sized viewport
-  const clefSize = small ? 42 : 56;
-  const x0 = left + (small ? 54 : 76);        // notes start after clef + key signature
-  const x1 = W - staffMargin();
-  const span = x1 - x0;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setClearColor(AUBERGINE, 1);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-  // staff lines
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = `rgba(${ROYAL}, 0.22)`;
-  for (let i = 0; i < LINES; i++) {
-    const y = cy + (i - (LINES - 1) / 2) * GAP;
-    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(x1, y); ctx.stroke();
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(AUBERGINE, 0.015);
+  const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
+  camera.position.set(0, 0, 62);
+
+  // Palette shared across all three materials (one source of truth).
+  const uniforms = {
+    uTime:     { value: 0 },
+    uRoyal:    { value: new THREE.Color(0x7c3aed) },
+    uAmethyst: { value: new THREE.Color(0xa78bfa) },
+    uLilac:    { value: new THREE.Color(0xd8c9ff) },
+    uCore:     { value: new THREE.Color(0xece4ff) },
+  };
+
+  // ---------- (1) Dust: a deep, drifting field of latent points ----------
+  const N_DUST = small ? 700 : 1300;
+  const dust = new Float32Array(N_DUST * 3);
+  const dustSeed = new Float32Array(N_DUST);
+  for (let i = 0; i < N_DUST; i++) {
+    dust[i * 3]     = (Math.random() - 0.5) * 150;
+    dust[i * 3 + 1] = (Math.random() - 0.5) * 95;
+    dust[i * 3 + 2] = (Math.random() - 0.5) * 70 - 8;
+    dustSeed[i] = Math.random();
+  }
+  const dustGeo = new THREE.BufferGeometry();
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dust, 3));
+  dustGeo.setAttribute('aSeed', new THREE.BufferAttribute(dustSeed, 1));
+  const dustMat = new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthTest: false, depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */`
+      uniform float uTime;
+      attribute float aSeed;
+      varying float vTw;
+      varying float vFade;
+      void main() {
+        vec3 p = position;
+        float s = aSeed * 6.2831853;
+        p.x += sin(uTime * 0.24 + s) * 1.7;
+        p.y += cos(uTime * 0.19 + s * 1.3) * 1.7;
+        p.z += sin(uTime * 0.16 + s * 0.7) * 1.7;
+        vTw = 0.35 + 0.65 * (0.5 + 0.5 * sin(uTime * 1.3 + aSeed * 40.0));
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        vFade = smoothstep(150.0, 45.0, -mv.z);     // fade the deep field into the aubergine
+        gl_PointSize = (0.8 + 2.0 * vTw) * (300.0 / -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uRoyal;
+      uniform vec3 uAmethyst;
+      varying float vTw;
+      varying float vFade;
+      void main() {
+        vec2 d = gl_PointCoord - 0.5;
+        float r = length(d);
+        if (r > 0.5) discard;
+        float a = smoothstep(0.5, 0.0, r);
+        vec3 c = mix(uRoyal, uAmethyst, vTw);
+        gl_FragColor = vec4(c, a * (0.25 + 0.5 * vTw) * vFade);
+      }`,
+  });
+  const dustPts = new THREE.Points(dustGeo, dustMat);
+  dustPts.frustumCulled = false;
+  scene.add(dustPts);
+
+  // ---------- (2) Signal nodes: the constellation (CPU-driven drift + heat) ----------
+  const N_HUB = small ? 58 : 90;
+  const LINK = 21;            // max edge length (world units)
+  const MAX_SEG = 420;        // hard cap on drawn edges
+  const hubBase = new Float32Array(N_HUB * 3);
+  const hubSeed = new Float32Array(N_HUB);
+  const hubPos  = new Float32Array(N_HUB * 3);   // live positions, rebuilt each frame
+  const hubHeat = new Float32Array(N_HUB);       // 0..1 activation, decays
+  for (let i = 0; i < N_HUB; i++) {
+    hubBase[i * 3]     = (Math.random() - 0.5) * 116;
+    hubBase[i * 3 + 1] = (Math.random() - 0.5) * 70;
+    hubBase[i * 3 + 2] = (Math.random() - 0.5) * 44 - 6;
+    hubSeed[i] = Math.random();
+  }
+  const hubGeo = new THREE.BufferGeometry();
+  const hubPosAttr  = new THREE.BufferAttribute(hubPos, 3).setUsage(THREE.DynamicDrawUsage);
+  const hubHeatAttr = new THREE.BufferAttribute(hubHeat, 1).setUsage(THREE.DynamicDrawUsage);
+  hubGeo.setAttribute('position', hubPosAttr);
+  hubGeo.setAttribute('aSeed', new THREE.BufferAttribute(hubSeed, 1));
+  hubGeo.setAttribute('aHeat', hubHeatAttr);
+  const hubMat = new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthTest: false, depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */`
+      uniform float uTime;
+      attribute float aSeed;
+      attribute float aHeat;
+      varying float vGlow;
+      void main() {
+        float tw = 0.5 + 0.5 * sin(uTime * 1.5 + aSeed * 30.0);
+        vGlow = clamp(0.4 + 0.45 * tw + aHeat, 0.0, 1.6);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = (2.2 + 3.6 * vGlow) * (300.0 / -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uLilac;
+      uniform vec3 uCore;
+      varying float vGlow;
+      void main() {
+        vec2 d = gl_PointCoord - 0.5;
+        float r = length(d);
+        if (r > 0.5) discard;
+        float core = smoothstep(0.5, 0.0, r);
+        vec3 c = mix(uLilac, uCore, clamp(vGlow - 0.5, 0.0, 1.0));
+        gl_FragColor = vec4(c, core);
+      }`,
+  });
+  const hubPts = new THREE.Points(hubGeo, hubMat);
+  hubPts.frustumCulled = false;
+  scene.add(hubPts);
+
+  // ---------- (3) Edges: proximity graph, rebuilt each frame from live nodes ----------
+  const linePos = new Float32Array(MAX_SEG * 2 * 3);
+  const lineAlpha = new Float32Array(MAX_SEG * 2);
+  const lineGeo = new THREE.BufferGeometry();
+  const linePosAttr = new THREE.BufferAttribute(linePos, 3).setUsage(THREE.DynamicDrawUsage);
+  const lineAlphaAttr = new THREE.BufferAttribute(lineAlpha, 1).setUsage(THREE.DynamicDrawUsage);
+  lineGeo.setAttribute('position', linePosAttr);
+  lineGeo.setAttribute('aAlpha', lineAlphaAttr);
+  const lineMat = new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthTest: false, depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */`
+      attribute float aAlpha;
+      varying float vA;
+      void main() {
+        vA = aAlpha;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uRoyal;
+      uniform vec3 uAmethyst;
+      varying float vA;
+      void main() {
+        gl_FragColor = vec4(mix(uRoyal, uAmethyst, vA), vA);
+      }`,
+  });
+  const lines = new THREE.LineSegments(lineGeo, lineMat);
+  lines.frustumCulled = false;
+  scene.add(lines);
+
+  // ---------- Post: a restrained bloom for the glow ----------
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.75, 0.0);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+
+  // ---------- Interaction: gentle pointer parallax (desktop delight) ----------
+  let tx = 0, ty = 0, px = 0, py = 0;
+  if (!reduceMotion) addEventListener('pointermove', (e) => {
+    tx = e.clientX / innerWidth - 0.5;
+    ty = e.clientY / innerHeight - 0.5;
+  }, { passive: true });
+
+  function onResize() {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    composer.setSize(innerWidth, innerHeight);
+    bloom.setSize(innerWidth, innerHeight);
+  }
+  addEventListener('resize', onResize);
+
+  // Drift the nodes, decay heat, fire the occasional neuron, rebuild the edges.
+  let lastFire = 0;
+  function updateGraph(t, dt) {
+    for (let i = 0; i < N_HUB; i++) {
+      const s = hubSeed[i] * 6.2831853;
+      hubPos[i * 3]     = hubBase[i * 3]     + Math.sin(t * 0.21 + s) * 3.1;
+      hubPos[i * 3 + 1] = hubBase[i * 3 + 1] + Math.cos(t * 0.17 + s * 1.3) * 3.1;
+      hubPos[i * 3 + 2] = hubBase[i * 3 + 2] + Math.sin(t * 0.14 + s * 0.7) * 3.1;
+      hubHeat[i] = Math.max(0, hubHeat[i] - dt * 1.4);
+    }
+    if (t - lastFire > 0.5) {                 // a node "fires" — quiet inference metaphor
+      lastFire = t;
+      hubHeat[(Math.random() * N_HUB) | 0] = 1.0;
+    }
+    hubPosAttr.needsUpdate = true;
+    hubHeatAttr.needsUpdate = true;
+
+    let seg = 0;
+    const L2 = LINK * LINK;
+    for (let i = 0; i < N_HUB && seg < MAX_SEG; i++) {
+      const ax = hubPos[i * 3], ay = hubPos[i * 3 + 1], az = hubPos[i * 3 + 2];
+      for (let j = i + 1; j < N_HUB && seg < MAX_SEG; j++) {
+        const dx = ax - hubPos[j * 3], dy = ay - hubPos[j * 3 + 1], dz = az - hubPos[j * 3 + 2];
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > L2) continue;
+        const d = Math.sqrt(d2);
+        let a = 1 - d / LINK; a *= a;                                   // closer = stronger
+        const heat = Math.max(hubHeat[i], hubHeat[j]);
+        a *= 0.16 + heat * 0.95;                                        // faint, bright when firing
+        a *= 0.72 + 0.28 * Math.sin(t * 0.8 + (i * 7 + j) * 0.9);       // slow shimmer
+        if (a < 0.006) continue;
+        const o = seg * 6, va = seg * 2;
+        linePos[o]     = ax; linePos[o + 1] = ay; linePos[o + 2] = az;
+        linePos[o + 3] = hubPos[j * 3]; linePos[o + 4] = hubPos[j * 3 + 1]; linePos[o + 5] = hubPos[j * 3 + 2];
+        lineAlpha[va] = a; lineAlpha[va + 1] = a;
+        seg++;
+      }
+    }
+    linePosAttr.needsUpdate = true;
+    lineAlphaAttr.needsUpdate = true;
+    lineGeo.setDrawRange(0, seg * 2);
   }
 
-  // treble clef + D-major key signature (F# on the top line, C# in the 3rd space)
-  const ks = small ? 17 : 22;
-  glyph('\uD834\uDD1E', clefSize, left + 2, cy + 3, 0.8);  // 𝄞
-  glyph('\u266F', ks, left + (small ? 32 : 46), cy - 4 * (GAP / 2), 0.7);  // ♯ on F5
-  glyph('\u266F', ks, left + (small ? 42 : 58), cy - 1 * (GAP / 2), 0.7);  // ♯ on C5
-
-  // Standard note spacing (px per beat). When the whole phrase fits, stretch to
-  // fill the staff (desktop/landscape). When it doesn't (portrait phones), keep
-  // the spacing and pan the staff to follow the writing cursor — like a scrolling score.
-  const prog = (time / CYCLE) % 1;
-  const MIN_PXB = 46;
-  const fitPXB = span / totalBeats;
-  const scroll = fitPXB < MIN_PXB;
-  const PXB = scroll ? MIN_PXB : fitPXB;
-  const virtualW = totalBeats * PXB;
-  const cursorVX = prog * virtualW;
-  const camX = scroll
-    ? Math.min(Math.max(cursorVX - span * 0.45, 0), Math.max(virtualW - span, 0))
-    : 0;
-  const cx = x0 + (cursorVX - camX);
-
-  const lap = Math.floor(time / CYCLE);
-  if (lap !== lastLap) { lastLap = lap; seq.forEach((n) => (n.born = null)); }
-
-  // reveal notes as the cursor reaches them
-  seq.forEach((n) => {
-    n.x = x0 + (n.startN * virtualW - camX);
-    if (prog >= n.startN && n.born === null) n.born = time;
-  });
-  // only notes that are written and currently on the staff
-  const shown = seq.filter((n) => n.born !== null && n.x >= x0 - 1 && n.x <= x1 + 1);
-
-  // melodic contour
-  if (shown.length > 1) {
-    ctx.strokeStyle = `rgba(${ROYAL}, 0.16)`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    shown.forEach((n, i) => {
-      const ny = cy - n.deg * (GAP / 2);
-      if (i === 0) ctx.moveTo(n.x, ny); else ctx.lineTo(n.x, ny);
-    });
-    ctx.stroke();
+  function render(t) {
+    uniforms.uTime.value = t;
+    if (!reduceMotion) {
+      px += (tx - px) * 0.045;
+      py += (ty - py) * 0.045;
+      camera.position.x = Math.sin(t * 0.05) * 4 + px * 9;
+      camera.position.y = Math.cos(t * 0.043) * 2.2 - py * 6;
+      camera.lookAt(0, 0, 0);
+    }
+    composer.render();
   }
 
-  // notes with ink-bleed fade-in
-  const baseR = Math.min(small ? 4.5 : 5, PXB * 0.16); // size note heads to the spacing
-  const stemLen = small ? 26 : 34;
-  shown.forEach((n) => {
-    const age = time - n.born;
-    const ny = cy - n.deg * (GAP / 2);
-    const grow = Math.min(age / 0.35, 1);
-    const r = baseR + (1 - grow) * 6;
-    const a = Math.min(age / 0.3, 1) * 0.92;
+  // ---------- Loop / lifecycle ----------
+  const clock = new THREE.Clock();
+  let running = true;
+  function loop() {
+    if (!running) return;
+    requestAnimationFrame(loop);
+    const dt = Math.min(clock.getDelta(), 0.05);   // getDelta() also advances elapsedTime
+    const t = clock.elapsedTime;
+    updateGraph(t, dt);
+    render(t);
+  }
 
-    // ledger lines for notes beyond the staff
-    ctx.strokeStyle = `rgba(${ROYAL}, ${a * 0.7})`;
-    ctx.lineWidth = 1;
-    if (n.deg > 4) for (let d = 6; d <= n.deg; d += 2) { const ly = cy - d * (GAP / 2); ctx.beginPath(); ctx.moveTo(n.x - 11, ly); ctx.lineTo(n.x + 11, ly); ctx.stroke(); }
-    if (n.deg < -4) for (let d = -6; d >= n.deg; d -= 2) { const ly = cy - d * (GAP / 2); ctx.beginPath(); ctx.moveTo(n.x - 11, ly); ctx.lineTo(n.x + 11, ly); ctx.stroke(); }
-
-    // note head
-    ctx.fillStyle = `rgba(${ROYAL}, ${a})`;
-    ctx.beginPath(); ctx.ellipse(n.x, ny, r * 1.25, r, -0.35, 0, 7); ctx.fill();
-
-    // stem: down for high notes, up for low
-    ctx.strokeStyle = `rgba(${ROYAL}, ${a * 0.75})`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    if (n.deg >= 1) { ctx.moveTo(n.x - r * 1.1, ny); ctx.lineTo(n.x - r * 1.1, ny + stemLen); }
-    else { ctx.moveTo(n.x + r * 1.1, ny); ctx.lineTo(n.x + r * 1.1, ny - stemLen); }
-    ctx.stroke();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { running = false; }
+    else if (!reduceMotion && !running) { running = true; clock.getDelta(); loop(); }
   });
 
-  // AI cursor: glowing vertical line with a soft halo
-  const cursorH = small ? 46 : 70;
-  const grad = ctx.createLinearGradient(cx, cy - cursorH, cx, cy + cursorH);
-  grad.addColorStop(0, `rgba(${ROYAL}, 0)`);
-  grad.addColorStop(0.5, `rgba(${ROYAL}, 0.9)`);
-  grad.addColorStop(1, `rgba(${ROYAL}, 0)`);
-  ctx.strokeStyle = grad;
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(cx, cy - cursorH); ctx.lineTo(cx, cy + cursorH); ctx.stroke();
-  ctx.fillStyle = `rgba(${ROYAL}, 0.9)`;
-  ctx.beginPath(); ctx.arc(cx, cy - (cursorH + 8), 3.5, 0, 7); ctx.fill();
-}
+  addEventListener('pagehide', () => {
+    running = false;
+    dustGeo.dispose(); dustMat.dispose();
+    hubGeo.dispose();  hubMat.dispose();
+    lineGeo.dispose(); lineMat.dispose();
+    bloom.dispose?.(); composer.dispose?.(); renderer.dispose();
+  }, { once: true });
 
-let running = true, start = performance.now();
-function loop(now) {
-  if (!running) return;
-  draw((now - start) / 1000);
-  requestAnimationFrame(loop);
+  if (reduceMotion) {
+    updateGraph(6.0, 0);   // one composed still frame — the constellation, held
+    render(6.0);
+  } else {
+    loop();
+  }
 }
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) running = false;
-  else if (!reduceMotion && !running) { running = true; requestAnimationFrame(loop); }
-});
-if (reduceMotion) { seq.forEach((n) => (n.born = 0)); lastLap = 0; draw(CYCLE * 0.98); }
-else requestAnimationFrame(loop);

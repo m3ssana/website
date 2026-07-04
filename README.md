@@ -1,6 +1,6 @@
 # messana.ai
 
-Personal landing page for **messana.ai** — v3 "The Glass Score." A quiet, royal‑purple‑on‑white wordmark floats over a music staff where a slow "AI" cursor writes a melody, note by note. The notes are a hidden transcription of Ed Sheeran's *Thinking Out Loud* (verse, D major, ~79 BPM) — a gem for those who read music. Installable as a PWA on iOS and Android.
+Personal landing page for **messana.ai** — v4 "Signal." A quiet, royal‑purple wordmark for the **Messana family** floats over a living neural constellation: glowing nodes joined by "signal" edges that form and dissolve as the graph slowly drifts — a minimal, AI‑themed nod to the family as its own small, connected signal node. Installable as a PWA on iOS and Android.
 
 Live at <https://messana.ai>.
 
@@ -8,31 +8,31 @@ Live at <https://messana.ai>.
 
 ```
 website/
-├── index.html             Markup + SEO/structured data + PWA tags
+├── index.html             Markup + SEO/structured data + PWA tags + three.js import map
 ├── css/
-│   └── styles.css          Purple + white design system, chrome overlay, responsive rules
+│   └── styles.css          Aubergine + purple design system, chrome overlay, responsive rules
 ├── js/
-│   └── main.js             UTC clock, the "Glass Score" canvas, service-worker registration
-├── manifest.webmanifest    PWA manifest (standalone, icons, theme)
-├── sw.js                   Service worker (offline app shell)
+│   └── main.js             UTC clock, the "Signal" WebGL constellation, service-worker registration
+├── manifest.webmanifest    PWA manifest (standalone, icons, dark theme)
+├── sw.js                   Service worker (offline app shell; runtime cache for fonts + three.js)
 ├── icon-180/192/512.png    PWA / home-screen icons
 ├── favicon.svg
 ├── concepts/               Design exploration — 10 concept directions + gallery (archive)
 └── CNAME                   GitHub Pages custom domain
 ```
 
-No build step. Everything is served as‑is — vanilla HTML/CSS/JS, no framework, no bundler. The homepage uses the Canvas 2D API (no WebGL), so it runs without any CDN dependency beyond Google Fonts.
+No build step. Vanilla HTML/CSS/JS — no framework, no bundler. The homepage backdrop uses **three.js r0.160** (WebGL) loaded through a native ES‑module import map from unpkg. If it can't load — offline first visit, CDN hiccup, no WebGL — the page degrades gracefully to a pure‑CSS violet gradient behind the wordmark, and the UTC clock keeps ticking regardless.
 
 ## The effect
 
-- **The Glass Score** — a five‑line treble staff sits in the lower third. A glowing vertical "AI" cursor sweeps left→right at the song's real tempo (derived from `BPM`), revealing each note with an ink‑bleed fade and a faint melodic contour line. The key signature (two sharps) and clef are drawn in; the phrase loops.
-- **Hidden melody** — the note data is *Thinking Out Loud*; lyrics are intentionally omitted so it reads as pure notation.
-- **Live UTC clock** and the family chrome (coordinates, operator/contact names) frame the page.
+- **Signal** — a full‑bleed WebGL constellation sits behind the wordmark: a deep, drifting field of latent "dust" points; a sparser set of brighter **signal nodes**; and **edges** rebuilt every frame from the nodes' live positions, so connections appear as nodes drift near one another and fade as they part. Nodes occasionally "fire," blooming brighter and lighting their local edges — a quiet inference metaphor. Rendered with additive GPU points and a restrained `UnrealBloomPass` for the glow, in linear/sRGB‑correct color.
+- **Family framing** — the wordmark reads `messana.ai` above a small `the messana family` subhead; the chrome frames it with live coordinates, a UTC clock, and the operator/contact names.
+- **Motion with a reason** — slow camera parallax (nudged by the pointer on desktop) over a gently rewiring graph. Honors `prefers-reduced-motion` with a single composed still frame, and pauses the render loop on hidden tabs.
 
 ## PWA
 
-- `manifest.webmanifest` declares `display: standalone`, `orientation: any`, and maskable icons.
-- `sw.js` precaches the app shell and serves it offline (network‑first for navigations, cache‑first for assets, with runtime caching of Google Fonts).
+- `manifest.webmanifest` declares `display: standalone`, `orientation: any`, maskable icons, and a dark (`#160726`) theme.
+- `sw.js` precaches the app shell and serves it offline (network‑first for navigations, cache‑first for assets), with runtime caching of Google Fonts **and** the unpkg three.js modules — so the WebGL backdrop survives offline on repeat visits (the first load still needs the network).
 - iOS: `apple-mobile-web-app-*` tags + a PNG `apple-touch-icon`; Android/Chrome: manifest + service worker satisfy install criteria.
 - `viewport-fit=cover`, `100dvh`, and `env(safe-area-inset-*)` padding keep the chrome clear of the notch/Dynamic Island and home indicator in both orientations.
 
@@ -50,11 +50,11 @@ npx serve .
 
 Then visit <http://localhost:8000>. `localhost` is a secure context, so the PWA/service worker works there; in production GitHub Pages serves over HTTPS.
 
-> Note: service workers cache aggressively. After changing assets, bump the `CACHE` name in `sw.js` (currently `messana-v3-1`) or unregister via DevTools → Application.
+> Note: service workers cache aggressively. After changing assets, bump the `CACHE` name in `sw.js` (currently `messana-v4-1`) or unregister via DevTools → Application.
 
 ## Concept archive
 
-`concepts/` holds the ten v3 design explorations (and a gallery at `concepts/index.html`) that led to The Glass Score — including three.js pieces (Resonance Field, Latent Concerto, Spectral Ribbon) and Canvas 2D pieces. Kept as a reference; not linked from the homepage.
+`concepts/` holds the ten v3 design explorations (and a gallery at `concepts/index.html`) — including three.js pieces (Resonance Field, Latent Concerto, Spectral Ribbon) and Canvas 2D pieces. "Signal" grew out of these (chiefly Latent Concerto and Neural Orchestra). Kept as a reference; not linked from the homepage.
 
 ## Deployment
 

@@ -219,11 +219,11 @@ function signal(THREE, { EffectComposer, RenderPass, UnrealBloomPass, OutputPass
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: /* glsl */`
-      uniform vec3 uRoyal;
       uniform vec3 uAmethyst;
+      uniform vec3 uLilac;
       varying float vA;
       void main() {
-        gl_FragColor = vec4(mix(uRoyal, uAmethyst, vA), vA);
+        gl_FragColor = vec4(mix(uAmethyst, uLilac, clamp(vA, 0.0, 1.0)), vA);
       }`,
   });
   const lines = new THREE.LineSegments(lineGeo, lineMat);
@@ -280,11 +280,11 @@ function signal(THREE, { EffectComposer, RenderPass, UnrealBloomPass, OutputPass
         const d2 = dx * dx + dy * dy + dz * dz;
         if (d2 > L2) continue;
         const d = Math.sqrt(d2);
-        let a = 1 - d / LINK; a *= a;                                   // closer = stronger
+        let a = 1 - d / LINK;                                           // linear falloff — closer = stronger
         const heat = Math.max(hubHeat[i], hubHeat[j]);
-        a *= 0.16 + heat * 0.95;                                        // faint, bright when firing
-        a *= 0.72 + 0.28 * Math.sin(t * 0.8 + (i * 7 + j) * 0.9);       // slow shimmer
-        if (a < 0.006) continue;
+        a *= 0.5 + heat * 0.95;                                         // clearly faint at rest, bright when a node fires
+        a *= 0.8 + 0.2 * Math.sin(t * 0.8 + (i * 7 + j) * 0.9);         // gentle shimmer
+        if (a < 0.02) continue;
         const o = seg * 6, va = seg * 2;
         linePos[o]     = ax; linePos[o + 1] = ay; linePos[o + 2] = az;
         linePos[o + 3] = hubPos[j * 3]; linePos[o + 4] = hubPos[j * 3 + 1]; linePos[o + 5] = hubPos[j * 3 + 2];

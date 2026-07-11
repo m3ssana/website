@@ -31,7 +31,7 @@ No build step. Vanilla HTML/CSS/JS — no framework, no bundler. The homepage ba
 
 ## PWA
 
-- `manifest.webmanifest` declares `display: standalone`, `orientation: any`, maskable icons, and a dark (`#160726`) theme.
+- `manifest.webmanifest` declares `display: standalone`, `orientation: any`, maskable icons, and a dark (`#0a0414`) theme.
 - `sw.js` precaches the app shell and serves it offline (network‑first for navigations, cache‑first for assets), with runtime caching of Google Fonts **and** the unpkg three.js modules — so the WebGL backdrop survives offline on repeat visits (the first load still needs the network).
 - iOS: `apple-mobile-web-app-*` tags + a PNG `apple-touch-icon`; Android/Chrome: manifest + service worker satisfy install criteria.
 - `viewport-fit=cover`, `100dvh`, and `env(safe-area-inset-*)` padding keep the chrome clear of the notch/Dynamic Island and home indicator in both orientations.

@@ -74,7 +74,7 @@ async function boot() {
 }
 
 function signal(THREE, { EffectComposer, RenderPass, UnrealBloomPass, OutputPass }) {
-  const AUBERGINE = 0x160726;
+  const AUBERGINE = 0x0a0414;
   const small = Math.min(innerWidth, innerHeight) < 560;   // scale cost to the viewport
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });

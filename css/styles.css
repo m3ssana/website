@@ -6,7 +6,7 @@
    ============================================================ */
 
 :root {
-  --aubergine: #160726;
+  --aubergine: #0a0414;
   --plum:      #2e1065;
   --violet:    #4c1d95;
   --royal:     #7c3aed;
@@ -44,7 +44,7 @@ body {
   background:
     radial-gradient(120% 95% at 50% 40%, rgba(124, 58, 237, 0.20), transparent 60%),
     radial-gradient(90% 80% at 50% 118%, rgba(76, 29, 149, 0.30), transparent 62%),
-    linear-gradient(180deg, #1c0a33 0%, var(--aubergine) 58%, #0c0416 100%);
+    linear-gradient(180deg, #100522 0%, var(--aubergine) 58%, #050109 100%);
   background-attachment: fixed;
 }
 

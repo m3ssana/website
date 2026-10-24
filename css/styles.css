@@ -1,25 +1,29 @@
 /* ============================================================
-   messana.ai — v4 "Signal"
-   Royal purple on deep aubergine. A quiet wordmark for the
-   Messana family over a living neural constellation — a small,
-   connected signal node, rendered in glass and light.
+   messana.ai — v5 "Silk"
+   An editorial serif wordmark over slow-moving violet silk (a WebGL
+   fragment shader). A CSS gradient carries the page if WebGL is
+   unavailable.
    ============================================================ */
 
 :root {
-  --aubergine: #0a0414;
+  --ink:       #07030f;
+  --void:      #05020b;
   --plum:      #2e1065;
   --violet:    #4c1d95;
   --royal:     #7c3aed;
   --amethyst:  #a78bfa;
   --lilac:     #d8c9ff;
 
-  --white:  #ffffff;
-  --ink:       #f3e8ff;                       /* light text on dark */
-  --ink-dim:   rgba(224, 213, 255, 0.86);     /* subhead — lifted for contrast */
-  --ink-faint: rgba(216, 201, 255, 0.72);     /* chrome — lifted for contrast */
+  --text:      #f5efff;
+  --text-dim:  rgba(226, 214, 255, 0.82);
+  --text-faint:rgba(216, 201, 255, 0.62);
+  --hair:      rgba(216, 201, 255, 0.14);
 
-  --mono:  'IBM Plex Mono', 'SFMono-Regular', 'Consolas', 'Courier New', monospace;
-  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --serif: 'Instrument Serif', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --mono:  'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  --ease:  cubic-bezier(0.16, 1, 0.3, 1);
+
+  --edge: calc(0.9rem + 0.6vmin);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -35,20 +39,23 @@ html, body {
 body {
   min-height: 100dvh;
   font-family: var(--mono);
-  color: var(--ink);
-
-  /* The graceful fallback. If WebGL never loads, this deep-violet wash — a warm
-     core glow pooling behind the wordmark over a cooling aubergine field — stands
-     on its own so the wordmark never floats on a void. When the canvas paints, it
-     rides opaque on top; the wash returns instantly if the backdrop is unavailable. */
-  background:
-    radial-gradient(120% 95% at 50% 40%, rgba(124, 58, 237, 0.20), transparent 60%),
-    radial-gradient(90% 80% at 50% 118%, rgba(76, 29, 149, 0.30), transparent 62%),
-    linear-gradient(180deg, #100522 0%, var(--aubergine) 58%, #050109 100%);
+  color: var(--text);
+  background-color: var(--ink);
+  /* Fallback composition (no WebGL): a violet wash in gradients. The canvas
+     paints opaque on top of this when the shader runs. */
+  background-image:
+    radial-gradient(60% 45% at 62% 40%, rgba(124, 58, 237, 0.22), transparent 70%),
+    radial-gradient(120% 90% at 80% 10%, rgba(76, 29, 149, 0.45), transparent 60%),
+    radial-gradient(110% 90% at 15% 95%, rgba(46, 16, 101, 0.55), transparent 60%);
   background-attachment: fixed;
 }
 
-/* --- Canvas constellation (full bleed) --- */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* --- Backdrop layers --- */
 canvas.bg {
   position: fixed;
   inset: 0;
@@ -56,22 +63,37 @@ canvas.bg {
   height: 100dvh;
   display: block;
   z-index: 0;
+  opacity: 0;
+  transition: opacity 1.2s ease;
 }
+.gl canvas.bg { opacity: 1; }
 
-/* --- Readability veil: sits between the constellation and the text so glyphs stay
-   legible over bright bloom, without dimming the corners of the scene. A soft central
-   pool lifts the wordmark; gentle top/bottom bands lift the chrome. --- */
-.veil {
+/* Film grain: static SVG turbulence, blended softly so the silk feels tactile. */
+.grain {
   position: fixed;
   inset: 0;
-  z-index: 2;
+  z-index: 1;
   pointer-events: none;
-  background:
-    radial-gradient(56% 40% at 50% 50%, rgba(9, 3, 17, 0.58) 0%, rgba(9, 3, 17, 0.30) 46%, transparent 72%),
-    linear-gradient(180deg, rgba(9, 3, 17, 0.42) 0%, transparent 15%, transparent 84%, rgba(9, 3, 17, 0.46) 100%);
+  opacity: 0.09;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* --- Centered wordmark (terminal monospace) --- */
+/* Hairline frame — an editorial border just inside the safe area. */
+.frame {
+  position: fixed;
+  z-index: 2;
+  pointer-events: none;
+  top:    calc(var(--edge) + env(safe-area-inset-top));
+  right:  calc(var(--edge) + env(safe-area-inset-right));
+  bottom: calc(var(--edge) + env(safe-area-inset-bottom));
+  left:   calc(var(--edge) + env(safe-area-inset-left));
+  border: 1px solid var(--hair);
+  border-radius: 1.1rem;
+  animation: fade 1.6s var(--ease) 1.2s both;
+}
+
+/* --- Centered wordmark --- */
 .stage {
   position: fixed;
   inset: 0;
@@ -80,179 +102,185 @@ canvas.bg {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
   padding: 1.5rem;
   text-align: center;
+  pointer-events: none;
 }
 
 .wordmark {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: clamp(2.5rem, 10vw, 7rem);
-  line-height: 0.98;
-  letter-spacing: -0.01em;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2.6rem, min(10vw, 10.5dvh), 6.5rem);
+  line-height: 1;
+  letter-spacing: -0.025em;
   white-space: nowrap;
-  color: var(--ink);
-  /* Layered halo: a crisp dark edge + a soft dark bloom for separation from bright
-     nodes, then the brand purple glow on top. */
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.45),
-    0 4px 26px rgba(0, 0, 0, 0.5),
-    0 0 44px rgba(124, 58, 237, 0.4);
+  color: var(--text);
+  text-shadow: 0 0 48px rgba(124, 58, 237, 0.35);
   user-select: none;
-  animation: rise 1.1s var(--ease) both;
+  animation: focus 1.8s var(--ease) 0.7s both;
 }
-
-.wordmark .ai {
-  color: var(--amethyst);
+.wordmark em {
+  font-style: italic;
+  letter-spacing: 0;
+  background: linear-gradient(180deg, var(--lilac) 10%, var(--amethyst) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  padding-right: 0.06em;           /* keep the italic overhang from clipping */
 }
 
 .tagline {
-  margin-top: 1.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: clamp(0.9rem, 2.4dvh, 1.5rem);
   font-family: var(--mono);
   font-weight: 400;
-  font-size: clamp(0.64rem, 1.5vw, 0.82rem);
-  letter-spacing: 0.34em;
+  font-size: clamp(0.62rem, 1.3vw, 0.74rem);
+  letter-spacing: 0.38em;
   text-transform: uppercase;
-  color: var(--ink-dim);
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55);
+  color: var(--text-dim);
   user-select: none;
-  animation: rise 1.1s var(--ease) 0.18s both;
+  animation: rise 1.4s var(--ease) 1.15s both;
 }
-
-@keyframes rise {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: none; }
+.tagline::before,
+.tagline::after {
+  content: '';
+  width: clamp(1.25rem, 3vw, 2.25rem);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--amethyst));
+  opacity: 0.7;
 }
+.tagline::after { transform: scaleX(-1); }
+/* letter-spacing adds trailing space after the last glyph; pull it back so the
+   rule pair stays optically centered. */
+.tagline { padding-left: 0.38em; }
 
-/* --- Chrome overlay (coords, clock, names) --- */
-.chrome {
+/* --- Top / bottom bars (inside the frame) --- */
+.bar {
   position: fixed;
-  inset: 0;
   z-index: 4;
-  pointer-events: none;
-  padding:
-    calc(1.1rem + env(safe-area-inset-top))
-    calc(1.1rem + env(safe-area-inset-right))
-    calc(1.1rem + env(safe-area-inset-bottom))
-    calc(1.1rem + env(safe-area-inset-left));
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  font-size: clamp(0.62rem, 1.4vw, 0.72rem);
-  letter-spacing: 0.18em;
-}
-
-.chrome .row {
+  left:  calc(var(--edge) + 1.1rem + env(safe-area-inset-left));
+  right: calc(var(--edge) + 1.1rem + env(safe-area-inset-right));
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  font-size: clamp(0.6rem, 1.2vw, 0.68rem);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  animation: fade 1.6s var(--ease) 1.5s both;
 }
-/* Reserve the bottom-right corner for the info button so the names never run under it. */
-.chrome .row:last-child { padding-right: 3rem; }
+.bar-top    { top:    calc(var(--edge) + 0.95rem + env(safe-area-inset-top)); }
+.bar-bottom { bottom: calc(var(--edge) + 0.7rem + env(safe-area-inset-bottom)); }
 
 .tag {
-  color: var(--ink-faint);
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+  color: var(--text-faint);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.tag b { color: var(--lilac); font-weight: 500; }
+.names { color: var(--text-dim); }
+.names .amp {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.35em;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--amethyst);
+  margin: 0 0.3em;
+}
 
-/* --- Info affordance: a subtle disclosure explaining the backdrop's AI metaphor.
-   Quiet by default, brighter on hover/focus; opens a small readable popover. --- */
+/* --- Info affordance --- */
 .info {
-  position: fixed;
-  right: calc(0.9rem + env(safe-area-inset-right));
-  bottom: calc(0.9rem + env(safe-area-inset-bottom));
-  z-index: 5;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 2.25rem;
   height: 2.25rem;
+  margin-right: -0.5rem;
   border: none;
   border-radius: 999px;
   background: transparent;
-  color: var(--ink-faint);
+  color: var(--text-faint);
   cursor: pointer;
-  pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
   transition: color 0.25s var(--ease), background-color 0.25s var(--ease);
 }
-.info svg { display: block; filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.65)); }
+.info svg { display: block; }
 .info:hover,
-.info:focus-visible { color: var(--lilac); background: rgba(167, 139, 250, 0.14); }
+.info:focus-visible,
+.info[aria-expanded='true'] { color: var(--lilac); background: rgba(167, 139, 250, 0.12); }
 .info:focus-visible { outline: 2px solid var(--amethyst); outline-offset: 3px; }
 
 .info-panel {
   position: fixed;
-  right: calc(0.9rem + env(safe-area-inset-right));
-  bottom: calc(3.6rem + env(safe-area-inset-bottom));
   z-index: 5;
-  display: block;
-  width: min(21rem, calc(100vw - 2rem));
-  padding: 0.95rem 1.05rem 1.05rem;
-  background: rgba(18, 7, 33, 0.94);
-  border: 1px solid rgba(167, 139, 250, 0.28);
-  border-radius: 0.7rem;
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  color: var(--ink-dim);
-  font-size: 0.72rem;
-  line-height: 1.6;
-  letter-spacing: 0.015em;
+  right:  calc(var(--edge) + 0.75rem + env(safe-area-inset-right));
+  bottom: calc(var(--edge) + 3.6rem + env(safe-area-inset-bottom));
+  width: min(22rem, calc(100vw - 2.5rem));
+  padding: 1.1rem 1.2rem 1.2rem;
+  background: rgba(14, 6, 28, 0.72);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  border-radius: 0.9rem;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  line-height: 1.65;
   text-align: left;
-  pointer-events: auto;
-  animation: pop 0.28s var(--ease) both;
+  animation: pop 0.35s var(--ease) both;
 }
 .info-panel[hidden] { display: none; }
 .info-panel:focus { outline: none; }
-.info-panel p + p { margin-top: 0.6rem; }
+.info-panel p + p { margin-top: 0.65rem; }
 .info-panel b { color: var(--lilac); font-weight: 500; }
 .info-title {
-  font-family: var(--mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  margin-bottom: 0.55rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.25rem;
+  line-height: 1.2;
+  color: var(--text);
+  margin-bottom: 0.45rem;
 }
 
+/* --- Motion --- */
+@keyframes focus {
+  from { opacity: 0; filter: blur(14px); letter-spacing: 0.04em; }
+  to   { opacity: 1; filter: blur(0);    letter-spacing: -0.025em; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 @keyframes pop {
-  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to   { opacity: 1; transform: none; }
 }
 
-/* --- Phones: keep chrome text from clipping under the notch / off-screen, and keep
-   it readable. Safe-area insets are already in .chrome padding; here we let the rows
-   wrap and shrink so the lat/long, clock, and names stay fully visible. --- */
+/* --- Phones --- */
 @media (max-width: 600px) {
-  .stage { padding: 1rem; }
-  .chrome { font-size: 0.64rem; letter-spacing: 0.07em; }
-  .chrome .row { gap: 0.4rem 0.8rem; flex-wrap: wrap; }
-  .tag { white-space: normal; }
-  .tagline { letter-spacing: 0.24em; }
-  /* A touch more central lift on small, busy screens. */
-  .veil {
-    background:
-      radial-gradient(72% 34% at 50% 48%, rgba(9, 3, 17, 0.62) 0%, rgba(9, 3, 17, 0.32) 50%, transparent 74%),
-      linear-gradient(180deg, rgba(9, 3, 17, 0.5) 0%, transparent 17%, transparent 80%, rgba(9, 3, 17, 0.54) 100%);
-  }
+  :root { --edge: 0.6rem; }
+  .frame { border-radius: 0.9rem; }
+  .bar { left: calc(var(--edge) + 0.85rem + env(safe-area-inset-left)); right: calc(var(--edge) + 0.85rem + env(safe-area-inset-right)); letter-spacing: 0.1em; }
+  .tagline { letter-spacing: 0.3em; padding-left: 0.3em; gap: 0.7rem; }
+  .names .amp { margin: 0 0.2em; }
+}
+@media (max-width: 380px) {
+  .bar { font-size: 0.56rem; letter-spacing: 0.06em; }
 }
 
-@media (orientation: landscape) and (max-height: 560px) {
-  .wordmark { font-size: clamp(1.8rem, 7.5vh, 3.2rem); }
-  .tagline { margin-top: 0.9rem; }
-}
-
-@media (orientation: landscape) and (max-height: 480px) {
-  .chrome { font-size: 0.6rem; letter-spacing: 0.05em; }
-  .chrome .row { gap: 0.4rem 0.7rem; flex-wrap: wrap; }
-  .tag { white-space: normal; }
+@media (orientation: landscape) and (max-height: 520px) {
+  .wordmark { font-size: clamp(2rem, 10dvh, 3.4rem); }
+  .tagline { margin-top: 0.6rem; }
+  .bar-top { top: calc(var(--edge) + 0.6rem + env(safe-area-inset-top)); }
+  .bar-bottom { bottom: calc(var(--edge) + 0.35rem + env(safe-area-inset-bottom)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition: none !important; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

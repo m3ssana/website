@@ -1,21 +1,11 @@
 /* ============================================================
-   messana.ai — v4 "Signal"
-   A minimalistic, AI-themed landing page for the Messana family.
-   A slow-drifting neural constellation — glowing nodes joined by
-   "signal" edges that form and dissolve as the graph rewires —
-   sits behind the wordmark: the family as one small, connected
-   signal node, rendered in glass and light.
+   messana.ai — v5 "Silk"
+   One full-screen fragment shader: slow, domain-warped fbm "silk"
+   in violet. A soft light follows the pointer (or drifts when idle)
+   and flares on tap; the scene fades up from ink on first load.
 
-   The graph is alive and reactive: the cursor is a transient node
-   that brightens and knits edges to its neighbours; firing nodes
-   send "signal packets" travelling down their edges (a damped
-   chain — a quiet inference cascade); a click/tap ignites the
-   nearest node; the constellation reveals itself on first load;
-   and the whole palette breathes with a UTC day/night cycle,
-   staying deep-space dark throughout.
-
-   three.js r0.160 · additive GPU points + UnrealBloom · graceful
-   fallback to the CSS backdrop when WebGL/CDN is unavailable.
+   Plain WebGL 1 — no library, no CDN. If WebGL is unavailable the
+   canvas stays hidden and the CSS gradient carries the page.
    ============================================================ */
 
 /* PWA: register the service worker (root scope) */
@@ -23,7 +13,7 @@ if ('serviceWorker' in navigator) {
   addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
 
-/* Live UTC timestamp — the signal node's heartbeat. */
+/* Live UTC clock */
 const clockEl = document.getElementById('clock');
 function tickClock() {
   const d = new Date();
@@ -33,8 +23,7 @@ function tickClock() {
 tickClock();
 setInterval(tickClock, 1000);
 
-/* "About the backdrop" — a subtle disclosure explaining the AI metaphor.
-   Lives outside the WebGL path so it works even if three.js never loads. */
+/* "About the backdrop" disclosure — independent of WebGL. */
 (function aboutPanel() {
   const btn = document.getElementById('info-btn');
   const panel = document.getElementById('about');
@@ -58,617 +47,234 @@ setInterval(tickClock, 1000);
   btn.addEventListener('click', () => (panel.hidden ? open() : close()));
 })();
 
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const root = document.documentElement;
 const canvas = document.getElementById('scene');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ==PURE:START== */
-/* Pure, three.js-free helpers — self-contained (no THREE, no DOM, no scene state).
-   Unit-tested headlessly in Node; keep this block dependency-free so the extraction
-   test can slice + import it directly. */
+const VERT = /* glsl */`
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+`;
 
-const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const FRAG = /* glsl */`
+precision highp float;
 
-function smoothstep(edge0, edge1, x) {
-  if (edge0 === edge1) return x < edge0 ? 0 : 1;
-  const t = clamp01((x - edge0) / (edge1 - edge0));
-  return t * t * (3 - 2 * t);
+uniform vec2  uRes;     // drawing-buffer size (px)
+uniform float uTime;    // seconds
+uniform float uIntro;   // 0 -> 1 first-load reveal
+uniform vec2  uLight;   // soft light position, follows the pointer (uv space)
+uniform float uPulse;   // tap flare, decays to 0
+
+// Brand palette (sRGB, written straight to the sRGB framebuffer)
+const vec3 INK    = vec3(0.027, 0.012, 0.059);   // #07030f
+const vec3 PLUM   = vec3(0.180, 0.063, 0.396);   // #2e1065
+const vec3 VIOLET = vec3(0.298, 0.114, 0.584);   // #4c1d95
+const vec3 ROYAL  = vec3(0.486, 0.227, 0.929);   // #7c3aed
+const vec3 LILAC  = vec3(0.847, 0.788, 1.000);   // #d8c9ff
+
+float hash(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
 }
 
-// First-load reveal envelopes: nodes bloom in, edges knit slightly later.
-const revealNodes = (t) => smoothstep(0.0, 1.5, t);
-const revealEdges = (t) => smoothstep(0.4, 1.6, t);
-
-// UTC day/night: 0 at 00:00 (deepest night) → 1 at 12:00 → 0 at 24:00.
-function daylight01(hours, minutes = 0) {
-  const frac = ((((hours + minutes / 60) % 24) + 24) % 24) / 24;
-  return 0.5 - 0.5 * Math.cos(frac * Math.PI * 2);
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
 
-// Day/night palette endpoints [night, day] — authored sRGB. The background day
-// endpoint stays under DN_DAY_CAP so "noon" never outshines the pre-darkening theme.
-const DN_NIGHT_BG = 0x070310;
-const DN_DAY_BG   = 0x150a2a;
-const DN_DAY_CAP  = 0x160b2e;
-const DN_ROYAL    = [0x6b2fd0, 0x8b4cf2];
-const DN_AMETHYST = [0x9578e8, 0xb89bff];
-const DN_LILAC    = [0xccb9f5, 0xe2d3ff];
-const DN_CORE     = [0xe4d9ff, 0xf4eeff];
-
-const hexToRGB = (hex) => ({
-  r: ((hex >> 16) & 255) / 255,
-  g: ((hex >> 8) & 255) / 255,
-  b: (hex & 255) / 255,
-});
-
-function mixHex(a, b, t) {
-  const k = clamp01(t), ca = hexToRGB(a), cb = hexToRGB(b);
-  return {
-    r: ca.r + (cb.r - ca.r) * k,
-    g: ca.g + (cb.g - ca.g) * k,
-    b: ca.b + (cb.b - ca.b) * k,
-  };
-}
-
-const packRGB = ({ r, g, b }) =>
-  (Math.round(clamp01(r) * 255) << 16) | (Math.round(clamp01(g) * 255) << 8) | Math.round(clamp01(b) * 255);
-
-// Rec.709 luminance on the authored sRGB values — enough to assert the day cap in tests.
-const relLuminance = ({ r, g, b }) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-// Given hub NDC xy (flat, stride 2), pointer NDC (px,py), return the nearest hub
-// index and the nearby set with a 1→0 proximity falloff inside `radius`.
-function pickNearby(ndc, n, px, py, radius) {
-  let nearest = -1, best = Infinity;
-  const list = [];
-  const r2 = radius * radius;
-  for (let i = 0; i < n; i++) {
-    const dx = ndc[i * 2] - px, dy = ndc[i * 2 + 1] - py;
-    const d2 = dx * dx + dy * dy;
-    if (d2 < best) { best = d2; nearest = i; }
-    if (d2 <= r2) list.push({ i, fall: 1 - Math.sqrt(d2) / radius });
+const mat2 ROT = mat2(0.80, 0.60, -0.60, 0.80);
+float fbm(vec2 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < OCTAVES; i++) {
+    v += a * noise(p);
+    p = ROT * p * 2.03 + 17.1;
+    a *= 0.5;
   }
-  return { nearest, list };
+  return v;
 }
 
-// ---- Signal-packet pool (plain typed arrays; no THREE) ----
-function makePool(cap) {
-  return {
-    cap, n: 0,
-    src: new Int16Array(cap), dst: new Int16Array(cap),
-    prog: new Float32Array(cap), speed: new Float32Array(cap), level: new Float32Array(cap),
-  };
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;   // centered, height = 1
+  float t = uTime * 0.035;
+
+  // ---- Silk: two levels of domain warping ----
+  vec2 p = uv * 1.5;
+  vec2 q = vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t));
+  vec2 r = vec2(fbm(p + 3.2 * q + vec2(1.7, 9.2) + 1.3 * t),
+                fbm(p + 3.2 * q + vec2(8.3, 2.8) - 0.9 * t));
+  float f = fbm(p + 3.0 * r);
+
+  vec3 col = mix(INK, PLUM, smoothstep(0.15, 0.85, f));
+  col = mix(col, VIOLET, smoothstep(0.35, 1.15, length(q)) * 0.65);
+  col = mix(col, ROYAL, smoothstep(0.55, 0.95, r.x) * 0.35);
+  float fold = smoothstep(0.62, 0.98, f) * smoothstep(0.35, 0.85, r.y);
+  col += LILAC * fold * 0.16;
+  col *= 0.40 + 1.15 * f * f;
+
+  // ---- Light: a soft glow that follows the pointer (slow drift when idle) ----
+  vec2 ld = uv - uLight;
+  float light = exp(-dot(ld, ld) * 7.0) * (1.0 + uPulse * 1.4);
+  col *= 1.0 + 1.1 * light;
+  col += ROYAL * light * 0.06 * (0.4 + f);
+
+  // ---- Legibility: a gentle, wide shadow pooled behind the wordmark ----
+  vec2 tv = uv * vec2(0.85, 1.9);
+  col *= 1.0 - 0.32 * exp(-dot(tv, tv) * 5.0);
+
+  // ---- Finish ----
+  vec2 vv = gl_FragCoord.xy / uRes - 0.5;
+  col *= 1.0 - dot(vv, vv) * 1.15;                       // vignette
+  col = mix(INK, col, smoothstep(0.0, 0.35, uIntro));    // fade up from ink
+  col += (hash(gl_FragCoord.xy + fract(uTime)) - 0.5) / 255.0;   // dither out banding
+  gl_FragColor = vec4(col, 1.0);
 }
+`;
 
-// Spawn up to `maxPer` packets from `src` toward `neighbors`, bounded by pool capacity.
-function spawnPackets(pool, src, neighbors, level, speed, maxPer) {
-  let added = 0;
-  for (let k = 0; k < neighbors.length && added < maxPer && pool.n < pool.cap; k++) {
-    const idx = pool.n++;
-    pool.src[idx] = src; pool.dst[idx] = neighbors[k];
-    pool.prog[idx] = 0; pool.speed[idx] = speed; pool.level[idx] = level;
-    added++;
-  }
-  return added;
-}
+silk();
 
-// Advance all packets by dt, compact survivors in place, return arrivals [{dst, level}].
-function advancePackets(pool, dt) {
-  const arrivals = [];
-  let w = 0;
-  for (let i = 0; i < pool.n; i++) {
-    const p = pool.prog[i] + pool.speed[i] * dt;
-    if (p >= 1) { arrivals.push({ dst: pool.dst[i], level: pool.level[i] }); continue; }
-    pool.src[w] = pool.src[i]; pool.dst[w] = pool.dst[i];
-    pool.prog[w] = p; pool.speed[w] = pool.speed[i]; pool.level[w] = pool.level[i];
-    w++;
-  }
-  pool.n = w;
-  return arrivals;
-}
-
-// Damped chain: deposit heat on arrival; return the onward fire-level if the node
-// re-fires, else 0. Because level shrinks by `damp` each hop and re-fire needs
-// level ≥ `refireMin`, cascades self-extinguish within a couple of hops.
-function chainOnArrival(heat, dst, level, deposit, refireMin, damp, heatCap) {
-  heat[dst] = Math.min(heatCap, heat[dst] + level * deposit);
-  return level >= refireMin ? level * damp : 0;
-}
-/* ==PURE:END== */
-
-/* The WebGL backdrop is a progressive enhancement. If three.js can't load
-   (offline first visit, CDN hiccup, ancient browser), we hide the canvas and
-   the CSS gradient carries the page — the wordmark never sits on a void.
-   Dynamic import keeps the clock + service worker alive regardless. */
-boot();
-
-async function boot() {
-  let THREE, EffectComposer, RenderPass, UnrealBloomPass, OutputPass;
-  try {
-    THREE = await import('three');
-    ({ EffectComposer } = await import('three/addons/postprocessing/EffectComposer.js'));
-    ({ RenderPass } = await import('three/addons/postprocessing/RenderPass.js'));
-    ({ UnrealBloomPass } = await import('three/addons/postprocessing/UnrealBloomPass.js'));
-    ({ OutputPass } = await import('three/addons/postprocessing/OutputPass.js'));
-  } catch (err) {
-    canvas.style.display = 'none';   // stand down; let the CSS backdrop shine
-    return;
-  }
-  signal(THREE, { EffectComposer, RenderPass, UnrealBloomPass, OutputPass });
-}
-
-function signal(THREE, { EffectComposer, RenderPass, UnrealBloomPass, OutputPass }) {
-  const AUBERGINE = 0x0a0414;
-  const small = Math.min(innerWidth, innerHeight) < 560;   // scale cost to the viewport
-
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.setSize(innerWidth, innerHeight);
-  renderer.setClearColor(AUBERGINE, 1);
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-  const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(AUBERGINE, 0.015);
-  const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
-  camera.position.set(0, 0, 62);
-
-  // Palette shared across all materials (one source of truth). uIntro drives the
-  // first-load reveal; the colours drift subtly with the UTC day/night cycle.
-  const uniforms = {
-    uTime:     { value: 0 },
-    uIntro:    { value: 0 },
-    uRoyal:    { value: new THREE.Color(0x7c3aed) },
-    uAmethyst: { value: new THREE.Color(0xa78bfa) },
-    uLilac:    { value: new THREE.Color(0xd8c9ff) },
-    uCore:     { value: new THREE.Color(0xece4ff) },
-  };
-
-  // ---------- (1) Dust: a deep, drifting field of latent points ----------
-  const N_DUST = small ? 700 : 1300;
-  const dust = new Float32Array(N_DUST * 3);
-  const dustSeed = new Float32Array(N_DUST);
-  for (let i = 0; i < N_DUST; i++) {
-    dust[i * 3]     = (Math.random() - 0.5) * 150;
-    dust[i * 3 + 1] = (Math.random() - 0.5) * 95;
-    dust[i * 3 + 2] = (Math.random() - 0.5) * 70 - 8;
-    dustSeed[i] = Math.random();
-  }
-  const dustGeo = new THREE.BufferGeometry();
-  dustGeo.setAttribute('position', new THREE.BufferAttribute(dust, 3));
-  dustGeo.setAttribute('aSeed', new THREE.BufferAttribute(dustSeed, 1));
-  const dustMat = new THREE.ShaderMaterial({
-    uniforms, transparent: true, depthTest: false, depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    vertexShader: /* glsl */`
-      uniform float uTime;
-      attribute float aSeed;
-      varying float vTw;
-      varying float vFade;
-      void main() {
-        vec3 p = position;
-        float s = aSeed * 6.2831853;
-        p.x += sin(uTime * 0.24 + s) * 1.7;
-        p.y += cos(uTime * 0.19 + s * 1.3) * 1.7;
-        p.z += sin(uTime * 0.16 + s * 0.7) * 1.7;
-        vTw = 0.35 + 0.65 * (0.5 + 0.5 * sin(uTime * 1.3 + aSeed * 40.0));
-        vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        vFade = smoothstep(150.0, 45.0, -mv.z);     // fade the deep field into the aubergine
-        gl_PointSize = (0.8 + 2.0 * vTw) * (300.0 / -mv.z);
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: /* glsl */`
-      uniform vec3 uRoyal;
-      uniform vec3 uAmethyst;
-      uniform float uIntro;
-      varying float vTw;
-      varying float vFade;
-      void main() {
-        vec2 d = gl_PointCoord - 0.5;
-        float r = length(d);
-        if (r > 0.5) discard;
-        float a = smoothstep(0.5, 0.0, r);
-        vec3 c = mix(uRoyal, uAmethyst, vTw);
-        gl_FragColor = vec4(c, a * (0.25 + 0.5 * vTw) * vFade * uIntro);
-      }`,
+function silk() {
+  const gl = canvas.getContext('webgl', {
+    alpha: false, antialias: false, depth: false, stencil: false,
+    premultipliedAlpha: false, powerPreference: 'high-performance',
   });
-  const dustPts = new THREE.Points(dustGeo, dustMat);
-  dustPts.frustumCulled = false;
-  scene.add(dustPts);
+  if (!gl) return standDown();
 
-  // ---------- (2) Signal nodes: the constellation (CPU-driven drift + heat) ----------
-  const N_HUB = small ? 58 : 90;
-  const LINK = 21;            // max edge length (world units)
-  const MAX_SEG = 420;        // hard cap on drawn edges
-  const POINTER_EDGE_MAX = 8; // reserved for cursor→node edges
-  const HUB_SEG_MAX = MAX_SEG - POINTER_EDGE_MAX;   // leave room so pointer edges always fit
-  const hubBase = new Float32Array(N_HUB * 3);
-  const hubSeed = new Float32Array(N_HUB);
-  const hubPos  = new Float32Array(N_HUB * 3);   // live positions, rebuilt each frame
-  const hubHeat = new Float32Array(N_HUB);       // 0..1 activation, decays
-  for (let i = 0; i < N_HUB; i++) {
-    hubBase[i * 3]     = (Math.random() - 0.5) * 116;
-    hubBase[i * 3 + 1] = (Math.random() - 0.5) * 70;
-    hubBase[i * 3 + 2] = (Math.random() - 0.5) * 44 - 6;
-    hubSeed[i] = Math.random();
+  const small = Math.min(innerWidth, innerHeight) < 560;
+  const prog = buildProgram(gl, VERT, FRAG.replace('OCTAVES', small ? '4' : '5'));
+  if (!prog) return standDown();
+
+  // full-screen triangle
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, 'aPos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+  gl.useProgram(prog);
+
+  const U = {};
+  for (const k of ['uRes', 'uTime', 'uIntro', 'uLight', 'uPulse']) U[k] = gl.getUniformLocation(prog, k);
+
+  // The silk is soft, so render below native resolution and let CSS upscale;
+  // cap total pixels so huge/HiDPI screens stay cool.
+  function resize() {
+    let scale = Math.min(devicePixelRatio || 1, 1.5) * 0.8;
+    const maxPx = 1.4e6;
+    if (innerWidth * innerHeight * scale * scale > maxPx) scale = Math.sqrt(maxPx / (innerWidth * innerHeight));
+    canvas.width = Math.max(1, Math.round(innerWidth * scale));
+    canvas.height = Math.max(1, Math.round(innerHeight * scale));
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform2f(U.uRes, canvas.width, canvas.height);
   }
-  const hubGeo = new THREE.BufferGeometry();
-  const hubPosAttr  = new THREE.BufferAttribute(hubPos, 3).setUsage(THREE.DynamicDrawUsage);
-  const hubHeatAttr = new THREE.BufferAttribute(hubHeat, 1).setUsage(THREE.DynamicDrawUsage);
-  hubGeo.setAttribute('position', hubPosAttr);
-  hubGeo.setAttribute('aSeed', new THREE.BufferAttribute(hubSeed, 1));
-  hubGeo.setAttribute('aHeat', hubHeatAttr);
-  const hubMat = new THREE.ShaderMaterial({
-    uniforms, transparent: true, depthTest: false, depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    vertexShader: /* glsl */`
-      uniform float uTime;
-      attribute float aSeed;
-      attribute float aHeat;
-      varying float vGlow;
-      varying float vReveal;
-      void main() {
-        float tw = 0.5 + 0.5 * sin(uTime * 1.5 + aSeed * 30.0);
-        vGlow = clamp(0.4 + 0.45 * tw + aHeat, 0.0, 1.6);
-        vReveal = smoothstep(0.0, 0.9, uTime - aSeed * 0.55);   // staggered knit-in
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = (2.2 + 3.6 * vGlow) * (0.4 + 0.6 * vReveal) * (300.0 / -mv.z);
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: /* glsl */`
-      uniform vec3 uLilac;
-      uniform vec3 uCore;
-      varying float vGlow;
-      varying float vReveal;
-      void main() {
-        vec2 d = gl_PointCoord - 0.5;
-        float r = length(d);
-        if (r > 0.5) discard;
-        float core = smoothstep(0.5, 0.0, r);
-        vec3 c = mix(uLilac, uCore, clamp(vGlow - 0.5, 0.0, 1.0));
-        gl_FragColor = vec4(c, core * vReveal);
-      }`,
-  });
-  const hubPts = new THREE.Points(hubGeo, hubMat);
-  hubPts.frustumCulled = false;
-  scene.add(hubPts);
+  resize();
+  addEventListener('resize', () => { resize(); if (!running) draw(lastT); });
 
-  // ---------- (3) Edges: proximity graph, rebuilt each frame from live nodes ----------
-  const linePos = new Float32Array(MAX_SEG * 2 * 3);
-  const lineAlpha = new Float32Array(MAX_SEG * 2);
-  const lineGeo = new THREE.BufferGeometry();
-  const linePosAttr = new THREE.BufferAttribute(linePos, 3).setUsage(THREE.DynamicDrawUsage);
-  const lineAlphaAttr = new THREE.BufferAttribute(lineAlpha, 1).setUsage(THREE.DynamicDrawUsage);
-  lineGeo.setAttribute('position', linePosAttr);
-  lineGeo.setAttribute('aAlpha', lineAlphaAttr);
-  const lineMat = new THREE.ShaderMaterial({
-    uniforms, transparent: true, depthTest: false, depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    vertexShader: /* glsl */`
-      attribute float aAlpha;
-      varying float vA;
-      void main() {
-        vA = aAlpha;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /* glsl */`
-      uniform vec3 uAmethyst;
-      uniform vec3 uLilac;
-      varying float vA;
-      void main() {
-        gl_FragColor = vec4(mix(uAmethyst, uLilac, clamp(vA, 0.0, 1.0)), vA);
-      }`,
-  });
-  const lines = new THREE.LineSegments(lineGeo, lineMat);
-  lines.frustumCulled = false;
-  scene.add(lines);
-
-  // ---------- (4) Signal packets: bright pulses travelling fired edges ----------
-  const PACKET_CAP = 48;
-  const PACKET_SPEED = 1.1;        // progress/sec (~0.9s node-to-node)
-  const INIT_FANOUT = 4;           // packets from an initial (periodic/click) fire
-  const CHAIN_FANOUT = 2;          // packets from a re-fire (keeps cascades small)
-  const DEPOSIT = 0.35;            // heat deposited on arrival
-  const REFIRE_MIN = 0.55;         // arriving level needed to re-fire
-  const CHAIN_DAMP = 0.5;          // level shrinks each hop → cascade dies fast
-  const REFIRE_CHANCE = 0.6;       // re-fires only "occasionally"
-  const HEAT_CAP = 1.2;
-  const FRAME_SPAWN_BUDGET = 3;    // hard per-frame cap on new fires (belt + braces)
-  const pool = makePool(PACKET_CAP);
-  const pkPos = new Float32Array(PACKET_CAP * 3);
-  const pkLevel = new Float32Array(PACKET_CAP);
-  const pkGeo = new THREE.BufferGeometry();
-  const pkPosAttr = new THREE.BufferAttribute(pkPos, 3).setUsage(THREE.DynamicDrawUsage);
-  const pkLevelAttr = new THREE.BufferAttribute(pkLevel, 1).setUsage(THREE.DynamicDrawUsage);
-  pkGeo.setAttribute('position', pkPosAttr);
-  pkGeo.setAttribute('aLevel', pkLevelAttr);
-  pkGeo.setDrawRange(0, 0);
-  const pkMat = new THREE.ShaderMaterial({
-    uniforms, transparent: true, depthTest: false, depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    vertexShader: /* glsl */`
-      attribute float aLevel;
-      varying float vL;
-      void main() {
-        vL = clamp(aLevel, 0.0, 1.0);
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = (1.6 + 3.4 * vL) * (300.0 / -mv.z);
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: /* glsl */`
-      uniform vec3 uLilac;
-      uniform vec3 uCore;
-      varying float vL;
-      void main() {
-        vec2 d = gl_PointCoord - 0.5;
-        float r = length(d);
-        if (r > 0.5) discard;
-        float core = smoothstep(0.5, 0.0, r);
-        gl_FragColor = vec4(mix(uLilac, uCore, vL), core * vL);
-      }`,
-  });
-  const pkPts = new THREE.Points(pkGeo, pkMat);
-  pkPts.frustumCulled = false;
-  scene.add(pkPts);
-
-  // Nearest live neighbours of hub i (within LINK), closest first.
-  const _nbrBuf = [];
-  function neighborsOf(i, maxCount) {
-    _nbrBuf.length = 0;
-    const ax = hubPos[i * 3], ay = hubPos[i * 3 + 1], az = hubPos[i * 3 + 2];
-    const L2 = LINK * LINK;
-    for (let j = 0; j < N_HUB; j++) {
-      if (j === i) continue;
-      const dx = ax - hubPos[j * 3], dy = ay - hubPos[j * 3 + 1], dz = az - hubPos[j * 3 + 2];
-      const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 <= L2) _nbrBuf.push({ j, d2 });
-    }
-    _nbrBuf.sort((a, b) => a.d2 - b.d2);
-    const out = [];
-    for (let k = 0; k < maxCount && k < _nbrBuf.length; k++) out.push(_nbrBuf[k].j);
-    return out;
-  }
-
-  // Ignite a node and emit packets to its neighbours. `force` (a click) bypasses
-  // the per-frame budget so a tap always fires; auto/chain fires respect it.
-  let frameBudget = FRAME_SPAWN_BUDGET;
-  function fireHub(i, level, force = false) {
-    hubHeat[i] = Math.max(hubHeat[i], Math.min(HEAT_CAP, level));
-    if (!force && frameBudget <= 0) return;
-    const fan = level >= 0.9 ? INIT_FANOUT : CHAIN_FANOUT;
-    const nbrs = neighborsOf(i, fan);
-    if (nbrs.length) {
-      spawnPackets(pool, i, nbrs, level, PACKET_SPEED, fan);
-      if (!force) frameBudget--;
-    }
-  }
-
-  // ---------- Post: a restrained bloom for the glow ----------
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.75, 0.0);
-  composer.addPass(bloom);
-  composer.addPass(new OutputPass());
-
-  // ---------- Interaction: pointer parallax + cursor-as-node + click-to-fire ----------
-  let tx = 0, ty = 0, px = 0, py = 0;         // parallax targets / eased
-  let pnx = 0, pny = 0;                        // pointer in NDC (-1..1)
-  let pointerInfluence = 0;                    // rises on move, decays on stop/leave
-  const PROX_RADIUS = 0.18;                    // NDC radius of the cursor's pull
-  const PROX_HEAT = 0.7;                       // how bright nearby nodes get
-  const POINTER_EDGE_ALPHA = 0.9;
-  const INFLUENCE_DECAY = 2.5;                 // per second (~0.4s to fade out)
-  const _v = new THREE.Vector3();              // scratch (projection)
-  const _a = new THREE.Vector3();              // scratch (pointer world anchor)
-  const hubNDC = new Float32Array(N_HUB * 2);  // hub xy in NDC
-  const hubNDCz = new Float32Array(N_HUB);     // hub NDC depth (for the edge anchor)
-
-  const toNDC = (e) => {
-    pnx = (e.clientX / innerWidth) * 2 - 1;
-    pny = -((e.clientY / innerHeight) * 2 - 1);
-  };
+  // ---- Pointer: the corona leans toward you; a tap flares it ----
+  let lx = 0.25 * Math.min(innerWidth / innerHeight, 1.6), ly = 0.2;   // eased light position (uv)
+  let tlx = lx, tly = ly;            // target
+  let lastPointer = -Infinity;
+  let pulse = 0;
+  const toUV = (e) => [
+    (e.clientX - innerWidth / 2) / innerHeight,
+    -(e.clientY - innerHeight / 2) / innerHeight,
+  ];
   if (!reduceMotion) {
     addEventListener('pointermove', (e) => {
-      tx = e.clientX / innerWidth - 0.5;
-      ty = e.clientY / innerHeight - 0.5;
-      toNDC(e);
-      pointerInfluence = 1;
+      [tlx, tly] = toUV(e);
+      lastPointer = performance.now();
     }, { passive: true });
-    addEventListener('pointerleave', () => { pointerInfluence = 0; }, { passive: true });
     addEventListener('pointerdown', (e) => {
-      toNDC(e);
-      pointerInfluence = 1;
-      let nearest = -1, best = Infinity;               // nearest hub in screen space
-      for (let i = 0; i < N_HUB; i++) {
-        _v.set(hubPos[i * 3], hubPos[i * 3 + 1], hubPos[i * 3 + 2]).project(camera);
-        const dx = _v.x - pnx, dy = _v.y - pny, d2 = dx * dx + dy * dy;
-        if (d2 < best) { best = d2; nearest = i; }
-      }
-      if (nearest >= 0) fireHub(nearest, 1.0, true);   // a tap always ignites + ripples
+      if (e.target.closest && e.target.closest('button, .info-panel')) return;
+      [tlx, tly] = toUV(e);
+      lastPointer = performance.now();
+      pulse = 1;
     }, { passive: true });
   }
 
-  function onResize() {
-    camera.aspect = innerWidth / innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.setSize(innerWidth, innerHeight);
-    composer.setSize(innerWidth, innerHeight);
-    bloom.setSize(innerWidth, innerHeight);
-  }
-  addEventListener('resize', onResize);
-
-  // Position the camera (parallax) and refresh its matrices so project()/unproject()
-  // are correct this frame. Called before updateGraph so the cursor maths line up.
-  function positionCamera(t) {
-    if (!reduceMotion) {
-      px += (tx - px) * 0.045;
-      py += (ty - py) * 0.045;
-      camera.position.x = Math.sin(t * 0.05) * 4 + px * 9;
-      camera.position.y = Math.cos(t * 0.043) * 2.2 - py * 6;
-      camera.lookAt(0, 0, 0);
-    }
-    camera.updateMatrixWorld();
-    camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+  let lastT = 6;
+  function draw(t) {
+    lastT = t;
+    gl.uniform1f(U.uTime, t);
+    gl.uniform1f(U.uIntro, reduceMotion ? 1 : smoothstep(0.25, 2.9, t));
+    gl.uniform2f(U.uLight, lx, ly);
+    gl.uniform1f(U.uPulse, pulse);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  // Drift nodes, decay heat, advance the inference cascade, fire, rebuild edges,
-  // knit cursor edges, and lay out the packet points — the whole living graph.
-  let lastFire = 0;
-  function updateGraph(t, dt) {
-    frameBudget = FRAME_SPAWN_BUDGET;
-
-    // 1) drift + heat decay
-    for (let i = 0; i < N_HUB; i++) {
-      const s = hubSeed[i] * 6.2831853;
-      hubPos[i * 3]     = hubBase[i * 3]     + Math.sin(t * 0.21 + s) * 3.1;
-      hubPos[i * 3 + 1] = hubBase[i * 3 + 1] + Math.cos(t * 0.17 + s * 1.3) * 3.1;
-      hubPos[i * 3 + 2] = hubBase[i * 3 + 2] + Math.sin(t * 0.14 + s * 0.7) * 3.1;
-      hubHeat[i] = Math.max(0, hubHeat[i] - dt * 1.4);
-    }
-    hubPosAttr.needsUpdate = true;
-
-    // 2) advance packets, then the damped chain (arrivals deposit heat / re-fire)
-    const arrivals = advancePackets(pool, dt);
-    for (let k = 0; k < arrivals.length; k++) {
-      const nl = chainOnArrival(hubHeat, arrivals[k].dst, arrivals[k].level, DEPOSIT, REFIRE_MIN, CHAIN_DAMP, HEAT_CAP);
-      if (nl > 0 && frameBudget > 0 && Math.random() < REFIRE_CHANCE) fireHub(arrivals[k].dst, nl);
-    }
-
-    // 3) the periodic "inference" fire (held back until the reveal has settled)
-    if (t - lastFire > 0.5 && revealNodes(t) > 0.5) {
-      lastFire = t;
-      fireHub((Math.random() * N_HUB) | 0, 1.0);
-    }
-
-    // 4) rebuild the proximity edge graph (reserve headroom for cursor edges)
-    let seg = 0;
-    const introE = revealEdges(t);
-    const L2 = LINK * LINK;
-    for (let i = 0; i < N_HUB && seg < HUB_SEG_MAX; i++) {
-      const ax = hubPos[i * 3], ay = hubPos[i * 3 + 1], az = hubPos[i * 3 + 2];
-      for (let j = i + 1; j < N_HUB && seg < HUB_SEG_MAX; j++) {
-        const dx = ax - hubPos[j * 3], dy = ay - hubPos[j * 3 + 1], dz = az - hubPos[j * 3 + 2];
-        const d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 > L2) continue;
-        const d = Math.sqrt(d2);
-        let a = 1 - d / LINK;                                           // linear falloff — closer = stronger
-        const heat = Math.max(hubHeat[i], hubHeat[j]);
-        a *= 0.5 + heat * 0.95;                                         // clearly faint at rest, bright when a node fires
-        a *= 0.8 + 0.2 * Math.sin(t * 0.8 + (i * 7 + j) * 0.9);         // gentle shimmer
-        a *= introE;                                                    // edges knit in after the nodes
-        if (a < 0.02) continue;
-        const o = seg * 6, va = seg * 2;
-        linePos[o]     = ax; linePos[o + 1] = ay; linePos[o + 2] = az;
-        linePos[o + 3] = hubPos[j * 3]; linePos[o + 4] = hubPos[j * 3 + 1]; linePos[o + 5] = hubPos[j * 3 + 2];
-        lineAlpha[va] = a; lineAlpha[va + 1] = a;
-        seg++;
-      }
-    }
-
-    // 5) cursor as a transient node — brighten neighbours and knit edges toward it
-    if (!reduceMotion && pointerInfluence > 0.001) {
-      for (let i = 0; i < N_HUB; i++) {
-        _v.set(hubPos[i * 3], hubPos[i * 3 + 1], hubPos[i * 3 + 2]).project(camera);
-        hubNDC[i * 2] = _v.x; hubNDC[i * 2 + 1] = _v.y; hubNDCz[i] = _v.z;
-      }
-      const { nearest, list } = pickNearby(hubNDC, N_HUB, pnx, pny, PROX_RADIUS);
-      for (let k = 0; k < list.length; k++) {
-        const boost = list[k].fall * pointerInfluence * PROX_HEAT;     // a floor, not accumulation
-        if (boost > hubHeat[list[k].i]) hubHeat[list[k].i] = boost;
-      }
-      if (nearest >= 0 && list.length) {
-        _a.set(pnx, pny, hubNDCz[nearest]).unproject(camera);          // pointer at the nearest node's depth
-        let added = 0;
-        for (let k = 0; k < list.length && added < POINTER_EDGE_MAX && seg < MAX_SEG; k++) {
-          const a = list[k].fall * pointerInfluence * POINTER_EDGE_ALPHA;
-          if (a < 0.02) continue;
-          const hi = list[k].i, o = seg * 6, va = seg * 2;
-          linePos[o]     = _a.x; linePos[o + 1] = _a.y; linePos[o + 2] = _a.z;
-          linePos[o + 3] = hubPos[hi * 3]; linePos[o + 4] = hubPos[hi * 3 + 1]; linePos[o + 5] = hubPos[hi * 3 + 2];
-          lineAlpha[va] = a; lineAlpha[va + 1] = a;
-          seg++; added++;
-        }
-      }
-    }
-    pointerInfluence = Math.max(0, pointerInfluence - dt * INFLUENCE_DECAY);
-    linePosAttr.needsUpdate = true;
-    lineAlphaAttr.needsUpdate = true;
-    lineGeo.setDrawRange(0, seg * 2);
-
-    // 6) lay out packet points along their edges (fade in/out; gated by the reveal)
-    const introN = revealNodes(t);
-    for (let i = 0; i < pool.n; i++) {
-      const s = pool.src[i], d = pool.dst[i], pr = pool.prog[i];
-      const sx = hubPos[s * 3], sy = hubPos[s * 3 + 1], sz = hubPos[s * 3 + 2];
-      pkPos[i * 3]     = sx + (hubPos[d * 3]     - sx) * pr;
-      pkPos[i * 3 + 1] = sy + (hubPos[d * 3 + 1] - sy) * pr;
-      pkPos[i * 3 + 2] = sz + (hubPos[d * 3 + 2] - sz) * pr;
-      pkLevel[i] = pool.level[i] * Math.sin(Math.PI * pr) * introN;
-    }
-    pkPosAttr.needsUpdate = true;
-    pkLevelAttr.needsUpdate = true;
-    pkGeo.setDrawRange(0, pool.n);
-
-    // 7) push heat last, after every mutation (decay, chain, fire, cursor)
-    hubHeatAttr.needsUpdate = true;
-  }
-
-  // Day/night: drift the palette + background with UTC time-of-day (throttled to ~1/s).
-  // Kept deep-space dark end to end — the day background stays under the pre-dark theme.
-  let lastDN = -1;
-  function updateDayNight(t) {
-    const sec = t | 0;
-    if (sec === lastDN) return;
-    lastDN = sec;
-    const now = new Date();
-    const dl = daylight01(now.getUTCHours(), now.getUTCMinutes());
-    const bg = packRGB(mixHex(DN_NIGHT_BG, DN_DAY_BG, dl));
-    renderer.setClearColor(bg, 1);
-    scene.fog.color.setHex(bg);
-    uniforms.uRoyal.value.setHex(packRGB(mixHex(DN_ROYAL[0], DN_ROYAL[1], dl)));
-    uniforms.uAmethyst.value.setHex(packRGB(mixHex(DN_AMETHYST[0], DN_AMETHYST[1], dl)));
-    uniforms.uLilac.value.setHex(packRGB(mixHex(DN_LILAC[0], DN_LILAC[1], dl)));
-    uniforms.uCore.value.setHex(packRGB(mixHex(DN_CORE[0], DN_CORE[1], dl)));
-  }
-
-  function render(t) {
-    uniforms.uTime.value = t;
-    uniforms.uIntro.value = revealNodes(t);
-    updateDayNight(t);
-    composer.render();
-  }
-
-  // ---------- Loop / lifecycle ----------
-  const clock = new THREE.Clock();
-  let running = true;
-  function loop() {
+  // ---- Loop / lifecycle ----
+  let running = false;
+  let start = performance.now();
+  let prev = start;
+  function frame(now) {
     if (!running) return;
-    requestAnimationFrame(loop);
-    const dt = Math.min(clock.getDelta(), 0.05);   // getDelta() also advances elapsedTime
-    const t = clock.elapsedTime;
-    positionCamera(t);
-    updateGraph(t, dt);
-    render(t);
+    requestAnimationFrame(frame);
+    const dt = Math.min((now - prev) / 1000, 0.05);
+    prev = now;
+    const t = (now - start) / 1000;
+
+    // idle: the light drifts slowly in a wide loop
+    if (now - lastPointer > 3500) {
+      const a = 0.55 + t * 0.07;
+      tlx = Math.cos(a) * 0.42 * Math.min(innerWidth / innerHeight, 1.6);
+      tly = Math.sin(a) * 0.3;
+    }
+    const k = 1 - Math.exp(-dt * 2.2);
+    lx += (tlx - lx) * k;
+    ly += (tly - ly) * k;
+    pulse = Math.max(0, pulse - dt * 1.4);
+    draw(t);
+  }
+  function play() {
+    if (running || reduceMotion) return;
+    running = true;
+    prev = performance.now();
+    requestAnimationFrame(frame);
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { running = false; }
-    else if (!reduceMotion && !running) { running = true; clock.getDelta(); loop(); }
+    if (document.hidden) running = false;
+    else { start += performance.now() - prev; play(); }   // resume without a time jump
   });
 
-  addEventListener('pagehide', () => {
-    running = false;
-    dustGeo.dispose(); dustMat.dispose();
-    hubGeo.dispose();  hubMat.dispose();
-    lineGeo.dispose(); lineMat.dispose();
-    pkGeo.dispose();   pkMat.dispose();
-    bloom.dispose?.(); composer.dispose?.(); renderer.dispose();
-  }, { once: true });
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); running = false; standDown(); });
 
-  if (reduceMotion) {
-    positionCamera(6.0);
-    updateGraph(6.0, 0);   // one composed still frame — the constellation, held (fully revealed)
-    render(6.0);
-  } else {
-    loop();
+  root.classList.add('gl');
+  if (reduceMotion) draw(6);   // a single composed still
+  else play();
+}
+
+function standDown() {
+  root.classList.remove('gl');
+  canvas.style.display = 'none';
+}
+
+function buildProgram(gl, vs, fs) {
+  const compile = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.warn('[silk] shader:', gl.getShaderInfoLog(s));
+      return null;
+    }
+    return s;
+  };
+  const v = compile(gl.VERTEX_SHADER, vs), f = compile(gl.FRAGMENT_SHADER, fs);
+  if (!v || !f) return null;
+  const p = gl.createProgram();
+  gl.attachShader(p, v); gl.attachShader(p, f);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    console.warn('[silk] link:', gl.getProgramInfoLog(p));
+    return null;
   }
+  return p;
+}
+
+function smoothstep(a, b, x) {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
 }

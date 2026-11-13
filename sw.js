@@ -1,9 +1,9 @@
 /* messana.ai PWA service worker — precache the app shell, serve offline. */
-const CACHE = 'messana-v6-1';
+const CACHE = 'messana-v6-2';
 const SHELL = [
   '/',
   '/index.html',
-  '/css/styles.css?v=6',
+  '/css/styles.css?v=7',
   '/js/main.js?v=6',
   '/assets/table.jpg?v=6',
   '/manifest.webmanifest',

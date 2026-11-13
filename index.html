@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#07030f" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#f4f7f8" />
+  <meta name="color-scheme" content="light" />
 
   <title>messana.ai — Ron Messana &middot; Kendra Messana</title>
   <meta name="description" content="messana.ai is the personal domain of the Messana family — Ron Messana (Ronald Messana) and Kendra Messana." />
@@ -18,19 +18,18 @@
   <meta property="og:url" content="https://messana.ai/" />
   <meta property="og:title" content="messana.ai — Ron Messana &middot; Kendra Messana" />
   <meta property="og:description" content="The personal domain of Ron Messana (Ronald Messana) and Kendra Messana — the Messana family." />
-  <meta property="og:image" content="https://messana.ai/icon-512.png" />
+  <meta property="og:image" content="https://messana.ai/assets/table.jpg" />
   <meta property="og:locale" content="en_US" />
 
-  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="messana.ai — Ron Messana &middot; Kendra Messana" />
   <meta name="twitter:description" content="The personal domain of Ron Messana (Ronald Messana) and Kendra Messana." />
-  <meta name="twitter:image" content="https://messana.ai/icon-512.png" />
+  <meta name="twitter:image" content="https://messana.ai/assets/table.jpg" />
 
-  <!-- PWA (installable on iOS + Android, standalone) -->
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="messana.ai" />
   <meta name="application-name" content="messana.ai" />
   <link rel="apple-touch-icon" href="/icon-180.png" />
@@ -40,8 +39,8 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap" />
-  <link rel="stylesheet" href="css/styles.css?v=5.3" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@500;600;700&family=Outfit:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="css/styles.css?v=6" />
 
   <script type="application/ld+json">
   {
@@ -95,36 +94,34 @@
   </script>
 </head>
 <body>
-  <canvas class="bg" id="scene" aria-hidden="true"></canvas>
-  <div class="grain" aria-hidden="true"></div>
-  <div class="frame" aria-hidden="true"></div>
+  <div class="room">
+    <header class="mast">
+      <h1 class="wordmark">messana<span class="ai">.ai</span></h1>
+      <p class="family">The Messana family.</p>
+    </header>
 
-  <header class="bar bar-top">
-    <span class="tag" aria-hidden="true">27.8943&deg; N &nbsp;/&nbsp; 82.6686&deg; W</span>
-    <time class="tag" id="clock" aria-hidden="true">--:--:-- UTC</time>
-  </header>
+    <figure class="table">
+      <div class="frame">
+        <img
+          src="assets/table.jpg?v=6"
+          width="1248"
+          height="832"
+          alt="A sunlit kitchen table of white tile, set with two empty ceramic cups: a Deloitte-green cup on the left and a royal-purple cup on the right.">
+        <span class="ring ring--green" aria-hidden="true"></span>
+        <span class="ring ring--purple" aria-hidden="true"></span>
+      </div>
+      <figcaption class="places">
+        <button type="button" class="name name--ron">Ron Messana</button>
+        <button type="button" class="name name--kendra">Kendra Messana</button>
+      </figcaption>
+    </figure>
 
-  <main class="stage">
-    <h1 class="wordmark">messana<em>.ai</em></h1>
-    <p class="tagline">The Messana Family</p>
-  </main>
-
-  <footer class="bar bar-bottom">
-    <p class="tag names">Ron Messana <span class="amp" aria-hidden="true">&amp;</span><span class="sr-only">and</span> Kendra Messana</p>
-    <button id="info-btn" class="info" type="button" aria-expanded="false" aria-controls="about" aria-label="About this background">
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-        <circle cx="12" cy="12" r="9.25" fill="none" stroke="currentColor" stroke-width="1.4" />
-        <circle cx="12" cy="7.7" r="1.15" fill="currentColor" />
-        <rect x="11.08" y="10.7" width="1.84" height="6.3" rx="0.92" fill="currentColor" />
-      </svg>
-    </button>
-  </footer>
-
-  <div id="about" class="info-panel" aria-labelledby="about-title" tabindex="-1" hidden>
-    <p class="info-title" id="about-title">The backdrop</p>
-    <p>Slow, warped violet <b>silk</b>, drawn live on your GPU, one pixel at a time. Move your cursor (or tap) and a soft <b>light follows you</b> across it.</p>
+    <p class="radio">
+      <span class="coord">27.8943° N / 82.6686° W</span>
+      <span class="pip" aria-hidden="true"></span>
+      <time id="clock" datetime="">UTC</time>
+    </p>
   </div>
-
-  <script type="module" src="js/main.js?v=5.3"></script>
+  <script src="js/main.js?v=6"></script>
 </body>
 </html>
